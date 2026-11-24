@@ -1195,6 +1195,18 @@
           <span>Com a legenda ligada, deixa de fora a faixa de baixo do jogo, onde aparecem as falas das cenas. Assim não ficam duas legendas ao mesmo tempo.</span>
         </div>
       </label>
+      <div id="linhaEstiloLeg" style="display:grid; gap:8px; margin:4px 0 10px">
+        <div class="faixa"><span>Posição</span>
+          <div class="chips" id="posLeg" style="flex:1">
+            <button type="button" class="chip" data-posleg="meio" aria-pressed="true">No meio (na divisão)</button>
+            <button type="button" class="chip" data-posleg="baixo" aria-pressed="false">Embaixo</button>
+          </div></div>
+        <div class="faixa"><span>Estilo</span>
+          <div class="chips" id="estiloLeg" style="flex:1">
+            <button type="button" class="chip" data-estleg="amarela" aria-pressed="true">Toda amarela</button>
+            <button type="button" class="chip" data-estleg="destaque" aria-pressed="false">Branca + palavra amarela</button>
+          </div></div>
+      </div>
 
     </div>
 
@@ -2378,6 +2390,15 @@
       }).then((x) => x.json());
       if (r && r.area) {
         Object.assign(cfg.recorte.topo, r.area);
+        // Altura automatica: o espaco do rosto no MESMO formato da webcam, pra ela
+        // aparecer inteira e ampliada o minimo (menos ampliacao = camera mais nitida).
+        try {
+          const asp = (r.area.w * 16) / (r.area.h * 9), alvo = 1080 / asp;
+          const topH = alvo / ((cfg.recorte.juncao || 'degrade') === 'degrade' ? 1.24 : 1);
+          cfg.recorte.proporcaoTopo = Math.max(0.15, Math.min(0.6, Math.round(topH / 1920 * 100) / 100));
+          $('proporcao').value = Math.round(cfg.recorte.proporcaoTopo * 100);
+          $('proporcaoTxt').textContent = $('proporcao').value + '%';
+        } catch (_) {}
         aplicar(); guardar(); agendarPrevia();
         $('avisoWebcamTexto').innerHTML = 'Achei a webcam (<b>' + esc(r.canto) + '</b>) e já marquei. Confira na prévia ao lado.';
       } else {
@@ -2565,7 +2586,14 @@
   // Esconder a legenda do jogo: so faz sentido com a nossa ligada.
   if (cfg.esconderLegJogo === undefined) cfg.esconderLegJogo = true;
   $('esconderLegJogo').checked = cfg.esconderLegJogo;
-  const mostrarLegJogo = () => { $('linhaLegJogo').hidden = !$('legendar').checked; };
+  const mostrarLegJogo = () => { $('linhaLegJogo').hidden = !$('legendar').checked; $('linhaEstiloLeg').hidden = !$('legendar').checked; };
+  // Posicao e estilo da legenda (padrao: no meio, toda amarela - o visual dos cortes de react)
+  if (!cfg.posLeg) cfg.posLeg = 'meio';
+  if (!cfg.estiloLeg) cfg.estiloLeg = 'amarela';
+  function marcarChips(id, attr, valor) { $(id).querySelectorAll('[' + attr + ']').forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === valor))); }
+  marcarChips('posLeg', 'data-posleg', cfg.posLeg); marcarChips('estiloLeg', 'data-estleg', cfg.estiloLeg);
+  $('posLeg').addEventListener('click', (e) => { const b = e.target.closest('[data-posleg]'); if (!b) return; cfg.posLeg = b.dataset.posleg; marcarChips('posLeg', 'data-posleg', cfg.posLeg); guardar(); });
+  $('estiloLeg').addEventListener('click', (e) => { const b = e.target.closest('[data-estleg]'); if (!b) return; cfg.estiloLeg = b.dataset.estleg; marcarChips('estiloLeg', 'data-estleg', cfg.estiloLeg); guardar(); });
   mostrarLegJogo();
   $('legendar').addEventListener('change', mostrarLegJogo);
   $('esconderLegJogo').addEventListener('change', () => { cfg.esconderLegJogo = $('esconderLegJogo').checked; guardar(); });
@@ -3333,6 +3361,7 @@
         ordem: cfg.ordem, modelo: vel.modelo, qualidade: vel.qualidade,
         legendar: cfg.legenda && formato !== 'original',
         esconderLegendaJogo: cfg.esconderLegJogo !== false,
+        posicaoLegenda: cfg.posLeg || 'meio', estiloLegenda: cfg.estiloLeg || 'amarela',
         textoGancho: cfg.gancho, tamanhoLegenda: cfg.tamLegenda,
         detectarWebcam: cfg.focarRosto, detectarMomentos: cfg.picos,
         trecho: trechoFluxo ? { inicio: trechoFluxo.inicio, fim: trechoFluxo.fim } : null,

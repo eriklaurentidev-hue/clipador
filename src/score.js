@@ -815,7 +815,8 @@ function encontrarCortes(transcricao, energia, opcoes) {
       const sobrepoe = Math.min(e.fim, j.fim) - Math.max(e.inicio, j.inicio);
       if (sobrepoe <= 0) return false;
       const menor = Math.min(e.fim - e.inicio, j.fim - j.inicio);
-      return sobrepoe / menor > 0.3;
+      // 15%: acima disso a pessoa ve o mesmo lance em dois clipes e acha que repetiu.
+      return sobrepoe / menor > 0.15;
     });
     if (!conflita) escolhidos.push(j);
     if (escolhidos.length >= quantidade) break;

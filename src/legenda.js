@@ -71,7 +71,8 @@ function cabecalho(opcoes) {
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    'Style: Corte,' + fonte + ',' + tamanho + ',' + BRANCO + ',' + AMARELO + ',' + PRETO + ',&H64000000,' +
+    // estilo "amarela": a legenda toda amarela (padrao dos cortes de podcast/react)
+    'Style: Corte,' + fonte + ',' + tamanho + ',' + (opcoes.estiloLegenda === 'amarela' ? AMARELO : BRANCO) + ',' + AMARELO + ',' + PRETO + ',&H64000000,' +
       '-1,0,0,0,100,100,1,0,1,7,4,2,70,70,' + margemBaixo + ',1',
     // Alignment 8 = em cima, centralizado; 5 = bem no meio da tela. BorderStyle 3
     // desenha uma tarja atras do texto: legivel por cima de qualquer imagem.
@@ -207,6 +208,8 @@ function gerarAss(palavras, offset, destino, opcoes) {
       const texto = bloco.map((p, j) => {
         const limpo = escapar(p.texto);
         if (j === i) {
+          // estilo "amarela": tudo ja e amarelo, a palavra dita so cresce um tico
+          if (opcoes.estiloLegenda === 'amarela') return '{\\fscx110\\fscy110}' + limpo + '{\\fscx100\\fscy100}';
           // palavra sendo dita: amarela e um tico maior
           return '{\\c' + AMARELO + '\\fscx108\\fscy108}' + limpo + '{\\c' + BRANCO + '\\fscx100\\fscy100}';
         }

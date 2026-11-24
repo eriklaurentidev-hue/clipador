@@ -375,7 +375,8 @@ function filtroDeFormato(formato, recorte) {
       const alturaCam = alturaTopo + funde;
       return [
         recorteEncaixado('0:v', r.topo, LARGURA, alturaCam, 'topoCru'),
-        '[topoCru]format=yuva420p[topoA]',
+        // nitidez so na webcam: ela costuma ser ampliada 2 a 3x e fica macia
+        '[topoCru]unsharp=5:5:0.85:5:5:0,format=yuva420p[topoA]',
         'color=c=white:s=' + LARGURA + 'x' + alturaCam + ':r=1:d=1,format=gray,' +
           "geq=lum='if(lt(Y\\," + alturaTopo + ")\\,255\\,255*pow((H-Y)/" + funde + "\\,1.6))'[mascara]",
         '[topoA][mascara]alphamerge[topo]',
@@ -397,7 +398,8 @@ function filtroDeFormato(formato, recorte) {
     }
 
     return [
-      recorteEncaixado('0:v', r.topo, LARGURA, alturaTopo, 'topo'),
+      recorteEncaixado('0:v', r.topo, LARGURA, alturaTopo, 'topoCru'),
+      '[topoCru]unsharp=5:5:0.85:5:5:0[topo]',
       recorteEncaixado('0:v', baixo, LARGURA, alturaBaixo, 'baixo'),
       '[topo][baixo]vstack=inputs=2,setsar=1' + divisoria + '[v]',
     ].join(';');

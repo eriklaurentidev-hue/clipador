@@ -448,6 +448,11 @@ async function processar(opcoes, avisar) {
  * No split, ela precisa cair sobre o gameplay - se ficar colada no rodape
  * some atras da barra de progresso do TikTok.
  */
+/** Legenda na divisao entre a webcam e o jogo (so faz sentido no rosto + jogo). */
+function legendaNoMeio(opcoes, formato) {
+  return opcoes.posicaoLegenda === 'meio' && formato === 'split' && !!legenda.alturaDaDivisao(formato, opcoes.recorte);
+}
+
 function margemDaLegenda(opcoes, formatoEfetivo) {
   const formato = formatoEfetivo || opcoes.formato;
   // Se o clipe caiu pra vertical porque nao tinha webcam, a legenda nao pode
@@ -713,15 +718,20 @@ async function renderizarClipe(ctx, c) {
   if ((querLegenda || gancho || textoFixo) && ctx.vertical) {
     arquivoAss = 'leg-' + ctx.assinatura + '-' + limparNome(ctx.base) + '.ass';
     legenda.gerarAss(c.palavras || [], c.inicio, path.join(pastas.trabalho(), arquivoAss), {
-      tamanho: opcoes.tamanhoLegenda || 78,
-      margemBaixo: margemDaLegenda(opcoes, formatoDoClipe),
+      // Legenda no MEIO (na divisao entre a webcam e o jogo): letra um pouco menor
+      tamanho: opcoes.tamanhoLegenda || (legendaNoMeio(opcoes, formatoDoClipe) ? 64 : 78),
+      margemBaixo: legendaNoMeio(opcoes, formatoDoClipe)
+        ? Math.round(1920 - legenda.alturaDaDivisao(formatoDoClipe, opcoes.recorte) - (opcoes.tamanhoLegenda || 64) * 0.55)
+        : margemDaLegenda(opcoes, formatoDoClipe),
+      estiloLegenda: opcoes.estiloLegenda === 'amarela' ? 'amarela' : 'destaque',
       incluirPalavras: querLegenda,
       // O gancho da TELA e diferente do titulo do post: ele precisa criar
       // lacuna em 2 linhas, nao resumir o trecho.
       gancho: gancho,
       duracaoGancho: opcoes.duracaoGancho || 4,
       margemGancho: formatoDoClipe === 'split' ? 660 : 180,
-      posicaoGancho: opcoes.posicaoGancho === 'meio' ? 'meio' : 'topo',
+      // com a legenda na divisao, o gancho desce pro meio do jogo pra nao encostar nela
+      posicaoGancho: (opcoes.posicaoGancho === 'meio' || legendaNoMeio(opcoes, formatoDoClipe)) ? 'meio' : 'topo',
       textoFixo: textoFixo,
       alturaDivisao: legenda.alturaDaDivisao(formatoDoClipe, opcoes.recorte),
     });
