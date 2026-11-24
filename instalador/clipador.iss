@@ -3,7 +3,7 @@
 ; "montagem" com tudo que o programa precisa e chama o compilador.
 
 #define Nome "Clipador"
-#define Versao "1.0.2"
+#define Versao "1.0.3"
 #define Marca "Clipador"
 #define Exe "Clipador.exe"
 #ifndef MONTAGEM

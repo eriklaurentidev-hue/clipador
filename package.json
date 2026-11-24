@@ -1,6 +1,6 @@
 {
   "name": "clipador",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Clipador: corta video e live (gravada ou ao vivo) da Kick, Twitch e YouTube em clipes verticais, tudo no proprio PC",
   "main": "src/server.js",
