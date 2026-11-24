@@ -2,7 +2,7 @@
    Guarda só a "casca" da janela (HTML, ícones, fonte, lucide) pra abrir rápido e
    mostrar um aviso se o programa estiver fechado. Nunca guarda /api, vídeos ou
    cortes: isso sempre vem do programa rodando no PC. */
-const CACHE = 'clipador-v1';
+const CACHE = 'clipador-v2';
 const CASCA = ['/', '/ui/lucide.js', '/ui/manrope.woff2', '/ui/icone.png', '/ui/icone-192.png', '/ui/icone-512.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -21,7 +21,9 @@ const FORA = '<!doctype html><meta charset="utf-8"><meta name="viewport" content
 
 self.addEventListener('fetch', (e) => {
   const u = new URL(e.request.url);
-  if (e.request.method !== 'GET' || u.origin !== location.origin) return;
+  // So http(s) da propria origem. O video escolhido pela pessoa e um endereco
+  // blob: e o service worker nao consegue busca-lo (dava "Failed to fetch").
+  if (e.request.method !== 'GET' || !/^https?:$/.test(u.protocol) || u.origin !== location.origin) return;
   if (u.pathname.startsWith('/api/') || u.pathname === '/arquivo') return; // sempre ao vivo
   // Rede primeiro (o programa pode ter sido atualizado); sem rede, a casca guardada.
   e.respondWith(fetch(e.request).then((r) => {

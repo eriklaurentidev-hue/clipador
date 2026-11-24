@@ -7,7 +7,7 @@
       "nome": "Café",
       "valor": "R$ 8",
       "tipo": "uma vez",
-      "link": "",
+      "link": "https://pay.cakto.com.br/5ws9rqq_1363888",
       "texto": "Paga um café pro desenvolvedor e mostra que o Clipador te ajudou.",
       "leva": [
         "Um obrigado de verdade",
@@ -20,7 +20,7 @@
       "nome": "Lanche",
       "valor": "R$ 15",
       "tipo": "uma vez",
-      "link": "",
+      "link": "https://pay.cakto.com.br/r5a725i_1363906",
       "texto": "Ajuda a pagar as horas de desenvolvimento das próximas funções.",
       "leva": [
         "Tudo do Café",
@@ -33,7 +33,7 @@
       "nome": "Apoiador mensal",
       "valor": "R$ 20/mês",
       "tipo": "assinatura",
-      "link": "",
+      "link": "https://pay.cakto.com.br/bp5cbqc_1363919",
       "sugerido": true,
       "texto": "O apoio que mais ajuda: mantém o Clipador atualizado todo mês, quando Kick, Twitch ou YouTube mudam alguma coisa. Cancela quando quiser.",
       "leva": [
