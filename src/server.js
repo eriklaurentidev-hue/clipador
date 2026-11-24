@@ -61,6 +61,42 @@ function json(res, codigo, corpo) {
   res.end(texto);
 }
 
+/**
+ * Capa de um video (YouTube ou Twitch) pra usar de REFERENCIA de cores no Estudio.
+ * Mesma logica do online (online/worker.js): so devolve o endereco da imagem.
+ */
+async function capaDoLink(bruto) {
+  let u;
+  try { u = new URL(/^https?:\/\//i.test(bruto) ? bruto : 'https://' + bruto); } catch (_) { throw new Error('Esse link não parece válido.'); }
+  const h = u.hostname.replace(/^(www\.|m\.)/, ''), p = u.pathname.split('/').filter(Boolean);
+  let yt = null;
+  if (h === 'youtu.be') yt = p[0];
+  else if (/(^|\.)youtube\.com$/.test(h)) yt = u.searchParams.get('v') || (['shorts', 'live', 'embed'].includes(p[0]) ? p[1] : null);
+  if (yt) {
+    yt = String(yt).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 11);
+    for (const nome of ['maxresdefault', 'sddefault', 'hqdefault']) {
+      const c = 'https://i.ytimg.com/vi/' + yt + '/' + nome + '.jpg';
+      try { const r = await fetch(c, { method: 'HEAD' }); if (r.ok && Number(r.headers.get('content-length') || 2000) > 1500) return { capa: c, origem: 'youtube' }; } catch (_) {}
+    }
+    throw new Error('Não achei a capa desse vídeo do YouTube (confira a internet).');
+  }
+  if (h === 'twitch.tv' || h === 'clips.twitch.tv') {
+    let q = null;
+    if (p[0] === 'videos' && p[1]) q = 'query{video(id:"' + p[1].replace(/\D/g, '') + '"){previewThumbnailURL(width:1280,height:720)}}';
+    const slug = h === 'clips.twitch.tv' ? p[0] : (p[1] === 'clip' ? p[2] : null);
+    if (slug) q = 'query{clip(slug:"' + slug.replace(/[^a-z0-9_-]/gi, '') + '"){thumbnailURL(width:1280,height:720)}}';
+    if (q) {
+      const r = await fetch('https://gql.twitch.tv/gql', { method: 'POST', headers: { 'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko', 'Content-Type': 'application/json' }, body: JSON.stringify({ query: q }) });
+      const d = ((await r.json()) || {}).data || {};
+      const c = (d.video && d.video.previewThumbnailURL) || (d.clip && d.clip.thumbnailURL);
+      if (c) return { capa: c, origem: 'twitch' };
+    }
+    throw new Error('Não achei a capa desse link da Twitch (use o link de um vídeo ou clipe).');
+  }
+  if (/\.(jpe?g|png|webp)(\?|$)/i.test(u.pathname)) return { capa: u.href, origem: 'imagem' };
+  throw new Error('Cole o link de um vídeo do YouTube ou da Twitch (ou de uma imagem).');
+}
+
 // Junta os pedacos como bytes e so no fim vira texto: somar pedaco a pedaco
 // como texto quebrava acento que caisse na divisa entre dois pedacos.
 function lerBytes(req, limite) {
@@ -407,6 +443,74 @@ const servidor = http.createServer(async (req, res) => {
 
     if (rota === '/' || rota === '/index.html') {
       return servirArquivo(req, res, path.join(__dirname, 'ui', 'index.html'));
+    }
+
+    // Estúdio: Capas e Postagens (o mesmo src/ui/estudio.js do Clipador Online).
+    if (rota === '/estudio' || rota === '/estudio.html') {
+      return servirArquivo(req, res, path.join(__dirname, 'ui', 'estudio.html'));
+    }
+
+    // Clipes dos projetos mais novos pro Estúdio: título, legenda do post, gancho,
+    // a webcam marcada e o endereço do quadro original e do arquivo.
+    if (rota === '/api/estudio/clipes') {
+      const lista = [];
+      let n = 0;
+      for (const pj of projetos.listar().slice(0, 6)) {
+        const p = projetos.abrir(pj.pasta);
+        if (!p) continue;
+        let sessao = {};
+        try { sessao = JSON.parse(fs.readFileSync(path.join(pj.pasta, 'sessao.json'), 'utf8')) || {}; } catch (_) {}
+        const recorte = sessao.opcoes && sessao.opcoes.recorte;
+        const rosto = (p.formato || (sessao.opcoes && sessao.opcoes.formato)) === 'split' && recorte && recorte.topo ? recorte.topo : null;
+        for (const c of p.clipes || []) {
+          if (!c.arquivo) continue;
+          n++;
+          lista.push({
+            numero: n, titulo: c.titulo || ('Clipe ' + c.numero), legenda: c.legendaPost || c.titulo || '', gancho: c.gancho || '',
+            rosto, ext: 'mp4', projeto: p.nome,
+            quadro: '/api/estudio/quadro?pasta=' + encodeURIComponent(pj.pasta) + '&n=' + c.numero,
+            arquivo: '/arquivo?p=' + encodeURIComponent(c.arquivo),
+          });
+        }
+      }
+      return json(res, 200, { clipes: lista });
+    }
+
+    // Quadro 16:9 do vídeo ORIGINAL no meio do clipe (vira a imagem da capa).
+    // Sem o vídeo original (apagado/movido), usa a miniatura do próprio clipe.
+    if (rota === '/api/estudio/quadro') {
+      const p = projetos.abrir(url.searchParams.get('pasta') || '');
+      const c = p && (p.clipes || []).find((x) => String(x.numero) === url.searchParams.get('n'));
+      if (!c) { res.writeHead(404); return res.end(); }
+      let video = null;
+      try { video = JSON.parse(fs.readFileSync(path.join(p.pasta, 'sessao.json'), 'utf8')).video; } catch (_) {}
+      if (video && fs.existsSync(video)) {
+        fs.mkdirSync(pastas.trabalho(), { recursive: true });
+        const alvo = path.join(pastas.trabalho(), 'capa-' + crypto.createHash('md5').update(p.pasta + ':' + c.numero).digest('hex').slice(0, 12) + '.jpg');
+        if (!fs.existsSync(alvo)) await media.gerarFrame(video, (Number(c.inicio) + Number(c.fim)) / 2, alvo, 1280);
+        return enviarImagem(res, alvo);
+      }
+      if (c.miniatura && fs.existsSync(c.miniatura)) return enviarImagem(res, c.miniatura);
+      res.writeHead(404); return res.end();
+    }
+
+    // Capa (miniatura) de um vídeo do YouTube/Twitch pra usar de referência de cores.
+    if (rota === '/api/capa') {
+      try { return json(res, 200, await capaDoLink(String(url.searchParams.get('url') || '').trim())); }
+      catch (e) { return json(res, 422, { erro: e.message || String(e) }); }
+    }
+    // Repasse só pra imagens de capa (YouTube/Twitch): o navegador não lê direto por causa de CORS.
+    if (rota === '/api/imagem') {
+      let u;
+      try { u = new URL(url.searchParams.get('u') || ''); } catch (_) { return json(res, 400, { erro: 'endereço inválido' }); }
+      if (u.protocol !== 'https:' || !/(^|\.)(ytimg\.com|jtvnw\.net|twitch\.tv)$/.test(u.hostname)) return json(res, 403, { erro: 'host não permitido' });
+      try {
+        const r = await fetch(u.href);
+        if (!r.ok) return json(res, 502, { erro: 'a imagem não respondeu (' + r.status + ')' });
+        const buf = Buffer.from(await r.arrayBuffer());
+        res.writeHead(200, { 'Content-Type': r.headers.get('content-type') || 'image/jpeg', 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+        return res.end(buf);
+      } catch (e) { return json(res, 502, { erro: 'sem internet pra buscar a imagem' }); }
     }
 
     // PWA: o service worker precisa morar na raiz pra valer pro app inteiro.

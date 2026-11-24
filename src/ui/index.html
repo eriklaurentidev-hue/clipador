@@ -891,6 +891,8 @@
     <button class="btn principal p" id="btnLinkTopo" type="submit">Ir</button>
   </form>
   <button class="btn p" id="btnInstalar" hidden title="Instalar o Clipador como app"><i data-lucide="download" class="i"></i> <span>Instalar app</span></button>
+  <a class="btn p" href="/estudio#capas" title="Gerar capas no estilo do seu canal"><i data-lucide="image" class="i"></i> <span>Capas</span></a>
+  <a class="btn p" href="/estudio#postagens" title="Programar as postagens"><i data-lucide="calendar-clock" class="i"></i> <span>Postagens</span></a>
   <button class="btn p btn-apoiar" id="btnApoiar" title="Apoiar o Clipador"><i data-lucide="heart" class="i"></i> <span>Apoiar</span></button>
   <button class="btn p" id="btnProjetos"><i data-lucide="folder-kanban" class="i"></i> Projetos</button>
   <button class="btn p" id="btnAjustes"><i data-lucide="settings-2" class="i"></i> Ajustes</button>
@@ -3322,6 +3324,8 @@
       if (d.tipo === 'baixado' || d.tipo === 'fim') fonte.close();
       if (d.tipo === 'fim' && Array.isArray(d.clipes)) {
         const n = d.clipes.length;
+        // Pop-up de apoio: uma vez por sessao, uns segundos depois dos cortes prontos
+        if (n) setTimeout(() => { try { if (!sessionStorage.getItem('clipador.apoio.visto')) { sessionStorage.setItem('clipador.apoio.visto', '1'); $('btnApoiar').click(); } } catch (_) {} }, 3000);
         avisar(n ? (n === 1 ? '1 clipe pronto ⚡' : n + ' clipes prontos ⚡') : 'Terminei de procurar',
           n ? 'Abra o Clipador pra assistir, baixar e copiar a legenda.' : 'Não saiu nenhum corte desta vez. Veja o motivo no programa.', 'fim-' + id);
       }

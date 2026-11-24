@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clipador · Estúdio</title>
+<link rel="icon" type="image/png" href="/ui/icone.png">
+<link rel="manifest" href="/manifest.webmanifest">
+<style>
+:root { --fundo:#000; --sup:#0a0a0f; --sup2:#12121a; --linha:rgba(255,255,255,.08); --linha2:rgba(255,255,255,.15); --texto:#f5f7fb; --texto2:#a9afc0; --texto3:#6c7286;
+  --a:#22d3ee; --b:#a855f7; --c:#ec4899; --ok:#4ade80; --raio:20px; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+body::before { content:''; position:fixed; inset:0; pointer-events:none; z-index:0; background-image:linear-gradient(rgba(255,255,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.04) 1px,transparent 1px);
+  background-size:52px 52px; mask-image:radial-gradient(ellipse 85% 70% at 50% 10%,#000 35%,transparent 100%); }
+body::after { content:''; position:fixed; inset:-30% -10% auto; height:75vh; pointer-events:none; z-index:0; filter:blur(90px); opacity:.28;
+  background:radial-gradient(circle at 25% 40%,var(--a),transparent 50%),radial-gradient(circle at 75% 45%,var(--b),transparent 50%); }
+a { color: var(--a); }
+.i { width: 1.1em; height: 1.1em; vertical-align: -.18em; }
+.topo { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 12px clamp(14px,3vw,28px); border-bottom: 1px solid var(--linha); background: rgba(0,0,0,.7); backdrop-filter: blur(16px); }
+.marca { display:flex; align-items:center; gap:10px; color:inherit; text-decoration:none; } .marca img { width:34px; height:34px; border-radius:10px; } .marca b { font-size:17px; letter-spacing:-.02em; }
+.passos { display:flex; gap:6px; margin:0 auto; } .passo { display:flex; align-items:center; gap:8px; padding:7px 14px 7px 8px; border-radius:99px; border:1px solid var(--linha); color:var(--texto3); font-weight:650; font-size:13px; }
+.passo i { font-style:normal; width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:800; background:var(--sup2); }
+.passo.atual { color:var(--texto); border-color:var(--a); box-shadow:inset 0 0 0 1px var(--a); } .passo.atual i { background:linear-gradient(135deg,var(--a),var(--b)); color:#000; }
+.passo.feito { color:var(--texto2); } .passo.feito i { background:rgba(74,222,128,.18); color:var(--ok); }
+@media (max-width: 820px) { .passos .passo span { display:none; } .topo .esconde { display:none; } }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:11px 18px; border-radius:99px; border:1px solid var(--linha2); background:var(--sup2); color:var(--texto);
+  font:inherit; font-weight:700; cursor:pointer; text-decoration:none; transition:transform .15s, filter .15s, border-color .15s; white-space:nowrap; }
+.btn:hover { transform:translateY(-1px); border-color:rgba(34,211,238,.5); } .btn:disabled { opacity:.45; cursor:not-allowed; transform:none; }
+.btn.pri { border:0; color:#04060a; background:linear-gradient(90deg,var(--a),var(--b)); box-shadow:0 14px 34px -14px rgba(34,211,238,.85); }
+.btn.peq { padding:8px 13px; font-size:13px; }
+.wrap { position:relative; z-index:1; width:min(1220px,100% - 32px); margin:0 auto; padding:26px 0 70px; }
+h1 { font-size:clamp(1.7rem,4vw,2.7rem); line-height:1.06; letter-spacing:-.035em; margin:4px 0 8px; } h2 { font-size:1.35rem; letter-spacing:-.02em; margin:0 0 4px; }
+.grad { background:linear-gradient(90deg,var(--a),var(--b),var(--c)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+.sub { color:var(--texto2); margin:0 0 18px; max-width:48em; }
+.card { background:linear-gradient(170deg,rgba(255,255,255,.05),rgba(255,255,255,.012)); border:1px solid var(--linha); border-radius:var(--raio); padding:20px; backdrop-filter:blur(6px); }
+.etapa[hidden] { display:none !important; }
+.abas { display:inline-flex; padding:4px; border-radius:99px; background:var(--sup2); border:1px solid var(--linha); margin-bottom:14px; }
+.abas button { padding:9px 16px; border:0; border-radius:99px; background:transparent; color:var(--texto2); font:inherit; font-weight:700; cursor:pointer; }
+.abas button[aria-selected="true"] { background:linear-gradient(90deg,var(--a),var(--b)); color:#04060a; }
+.linha { display:flex; gap:10px; flex-wrap:wrap; align-items:center; } .linha > input[type=text] { flex:1; min-width:220px; }
+input[type=text], select { padding:12px 14px; border-radius:12px; border:1px solid var(--linha2); background:var(--sup2); color:var(--texto); font:inherit; }
+input[type=text]:focus, select:focus { outline:none; border-color:var(--a); box-shadow:0 0 0 3px rgba(34,211,238,.15); }
+.solta { display:grid; place-items:center; text-align:center; gap:8px; padding:40px 18px; border:2px dashed var(--linha2); border-radius:var(--raio); cursor:pointer; transition:.2s; }
+.solta:hover, .solta.em-cima { border-color:var(--a); background:rgba(34,211,238,.05); } .solta small { color:var(--texto3); }
+.info-video { display:grid; grid-template-columns:200px 1fr; gap:16px; align-items:center; margin-top:16px; }
+@media (max-width:640px) { .info-video { grid-template-columns:1fr; } }
+.info-video video { width:100%; border-radius:12px; background:#000; aspect-ratio:16/9; object-fit:cover; }
+.info-video b { display:block; font-size:16px; } .meta { color:var(--texto2); font-size:13.5px; }
+.faixa-trecho { margin-top:14px; } .faixa-trecho .linha { gap:8px; } .faixa-trecho input[type=text] { width:96px; text-align:center; font-variant-numeric:tabular-nums; }
+.rot { display:block; font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--texto3); margin:16px 0 8px; } .rot:first-child { margin-top:0; }
+.chips { display:flex; flex-wrap:wrap; gap:6px; }
+.chip { padding:8px 13px; border-radius:99px; border:1px solid var(--linha2); background:transparent; color:var(--texto2); font:inherit; font-size:13px; font-weight:650; cursor:pointer; }
+.chip[aria-pressed="true"] { color:var(--texto); border-color:var(--a); background:rgba(34,211,238,.12); box-shadow:inset 0 0 0 1px var(--a); }
+.chip small { color:var(--texto3); font-weight:600; }
+.grade2 { display:grid; grid-template-columns:1fr 330px; gap:18px; align-items:start; } @media (max-width:980px) { .grade2 { grid-template-columns:1fr; } }
+.palco { position:relative; border-radius:14px; overflow:hidden; background:#000; user-select:none; touch-action:none; }
+.palco video { display:block; width:100%; }
+.caixa { position:absolute; border:2px solid; border-radius:6px; cursor:move; } .caixa span { position:absolute; top:-24px; left:-2px; font:800 11px/1 system-ui; padding:5px 7px; border-radius:6px 6px 6px 0; color:#000; }
+.caixa .canto { position:absolute; right:-8px; bottom:-8px; width:16px; height:16px; border-radius:4px; cursor:nwse-resize; }
+.caixa.rosto { border-color:var(--a); background:rgba(34,211,238,.12); } .caixa.rosto span, .caixa.rosto .canto { background:var(--a); }
+.caixa.jogo { border-color:var(--ok); background:rgba(74,222,128,.07); } .caixa.jogo span, .caixa.jogo .canto { background:var(--ok); }
+.previa { display:grid; place-items:center; } .previa canvas { width:100%; max-width:290px; aspect-ratio:9/16; border-radius:24px; background:#000;
+  box-shadow:0 30px 70px -30px rgba(34,211,238,.55),0 0 0 1px var(--linha2); }
+.faixa-l { display:flex; align-items:center; gap:10px; } .faixa-l input { flex:1; accent-color:var(--a); } .faixa-l b { min-width:3em; text-align:right; font-size:13px; }
+.marca-op { display:flex; gap:10px; align-items:flex-start; padding:11px 12px; border-radius:12px; border:1px solid var(--linha); background:rgba(255,255,255,.02); cursor:pointer; margin-bottom:8px; }
+.marca-op input { margin-top:3px; accent-color:var(--a); width:17px; height:17px; flex:none; } .marca-op b { display:block; font-size:14px; } .marca-op small { display:block; color:var(--texto3); font-size:12.5px; line-height:1.45; }
+.aviso { display:flex; gap:10px; padding:12px 14px; border-radius:12px; font-size:13.5px; border:1px solid rgba(34,211,238,.25); background:rgba(34,211,238,.06); color:#cdeff6; margin-top:12px; }
+.aviso.erro { border-color:rgba(248,113,113,.35); background:rgba(248,113,113,.07); color:#fecaca; }
+.rodape-etapa { display:flex; justify-content:space-between; gap:10px; margin-top:18px; flex-wrap:wrap; }
+.grade3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; } @media (max-width:980px) { .grade3 { grid-template-columns:1fr; } }
+/* processamento */
+.proc { display:grid; gap:14px; } .barra { height:10px; border-radius:99px; background:var(--sup2); overflow:hidden; } .barra i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--a),var(--b),var(--c)); transition:width .3s; }
+.proc-topo { display:flex; align-items:center; gap:14px; } .giro { width:40px; height:40px; border-radius:50%; border:3px solid var(--linha2); border-top-color:var(--a); animation:gira 1s linear infinite; flex:none; }
+@keyframes gira { to { transform:rotate(360deg); } } .proc-topo b { font-size:16px; display:block; } .proc-topo small { color:var(--texto2); }
+/* clipes */
+.clipes { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:18px; margin-top:18px; }
+.clipe { display:grid; gap:10px; align-content:start; padding:12px; border-radius:22px; border:1px solid var(--linha); background:linear-gradient(170deg,rgba(255,255,255,.05),rgba(255,255,255,.01)); animation:entra .5s ease both; }
+@keyframes entra { from { opacity:0; transform:translateY(16px); } }
+.clipe .tela { position:relative; aspect-ratio:9/16; border-radius:16px; overflow:hidden; background:#06070b; display:grid; place-items:center; }
+.clipe video { width:100%; height:100%; object-fit:cover; } .clipe .espera { color:var(--texto3); font-size:13px; text-align:center; padding:12px; }
+.nota { position:absolute; top:10px; left:10px; z-index:2; font:800 12px/1 system-ui; padding:6px 9px; border-radius:99px; color:#000; background:linear-gradient(90deg,var(--a),var(--b)); }
+.clipe h3 { margin:0; font-size:14.5px; line-height:1.35; } .clipe .meta { font-size:12.5px; } .clipe .tags { color:var(--a); font-size:12.5px; }
+.clipe .acoes { display:flex; gap:6px; flex-wrap:wrap; }
+.dica { color:var(--texto3); font-size:12.5px; }
+.abas-app { position:relative; z-index:1; display:flex; gap:6px; width:min(1220px,100% - 32px); margin:18px auto 0; padding:5px; border-radius:16px; background:var(--sup); border:1px solid var(--linha); }
+.abas-app button { flex:1; padding:12px; border:0; border-radius:12px; background:transparent; color:var(--texto2); font:inherit; font-weight:750; cursor:pointer; }
+.abas-app button[aria-selected="true"] { color:#04060a; background:linear-gradient(90deg,var(--a),var(--b)); }
+.capa-grade { display:grid; grid-template-columns:360px 1fr; gap:18px; align-items:start; } @media (max-width:980px) { .capa-grade { grid-template-columns:1fr; } }
+.capa-palco { display:grid; place-items:center; background:repeating-conic-gradient(#0d0d12 0 25%, #121219 0 50%) 0 0/22px 22px; border-radius:16px; padding:16px; }
+.capa-palco canvas { max-width:100%; max-height:70vh; border-radius:12px; box-shadow:0 30px 70px -30px rgba(0,0,0,.9); }
+.miniaturas { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; } .miniaturas img { width:96px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; border:2px solid transparent; cursor:pointer; } .miniaturas img.sel { border-color:var(--a); }
+.paleta { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .paleta i { width:28px; height:28px; border-radius:8px; border:1px solid var(--linha2); cursor:pointer; }
+textarea { width:100%; min-height:96px; padding:12px 14px; border-radius:12px; border:1px solid var(--linha2); background:var(--sup2); color:var(--texto); font:inherit; resize:vertical; }
+input[type=datetime-local], input[type=file] { padding:10px 12px; border-radius:12px; border:1px solid var(--linha2); background:var(--sup2); color:var(--texto); font:inherit; width:100%; color-scheme:dark; }
+.posts { display:grid; gap:10px; } .post { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:14px; border-radius:16px; border:1px solid var(--linha); background:rgba(255,255,255,.025); }
+.post .quando { text-align:center; min-width:74px; } .post .quando b { display:block; font-size:20px; } .post .quando small { color:var(--texto3); }
+.post .rede { font-size:11px; font-weight:800; letter-spacing:.08em; padding:3px 8px; border-radius:99px; background:rgba(34,211,238,.12); color:var(--a); }
+.post .txt { font-size:13.5px; color:var(--texto2); white-space:pre-line; max-height:4.4em; overflow:hidden; }
+.post.feito { opacity:.5; } .post .acoes { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+@media (max-width:700px) { .post { grid-template-columns:1fr; } .post .acoes { justify-content:flex-start; } }
+.lote { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; margin-top:14px; }
+.lote figure { margin:0; display:grid; gap:6px; } .lote canvas { width:100%; border-radius:10px; border:1px solid var(--linha); background:#000; }
+.lote figure.vert canvas { aspect-ratio:9/16; } .lote figcaption { display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12px; color:var(--texto3); }
+.ref-mini { width:100%; border-radius:10px; margin-top:8px; border:1px solid var(--linha); }
+.fundo-modal { position:fixed; inset:0; z-index:60; display:grid; place-items:center; padding:20px; background:rgba(0,0,0,.66); backdrop-filter:blur(8px); animation:entra .35s ease both; }
+.modal { width:min(520px,100%); padding:28px 24px 22px; border-radius:26px; text-align:center; position:relative;
+  background:linear-gradient(170deg,#14141d,#0b0b11); border:1px solid rgba(168,85,247,.45); box-shadow:0 40px 100px -30px rgba(168,85,247,.6); }
+.modal h2 { font-size:1.5rem; margin:8px 0 6px; } .modal p { color:var(--texto2); margin:0 0 16px; }
+.modal .valores { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+.modal .valores a { display:grid; gap:2px; padding:12px 8px; border-radius:14px; border:1px solid var(--linha2); color:var(--texto); text-decoration:none; transition:.15s; }
+.modal .valores a:hover { border-color:var(--a); transform:translateY(-2px); } .modal .valores a.dest { border-color:var(--b); background:rgba(168,85,247,.12); }
+.modal .valores b { font-size:18px; } .modal .valores small { color:var(--texto3); font-size:11.5px; }
+.modal .fechar { position:absolute; top:12px; right:14px; background:none; border:0; color:var(--texto3); font-size:22px; cursor:pointer; }
+.beta { font-size:10px; font-weight:800; letter-spacing:.1em; padding:2px 7px; border-radius:99px; background:rgba(168,85,247,.2); color:#d8b4fe; vertical-align:middle; }
+[hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<!-- Estúdio do programa: Capas e Postagens (o mesmo estudio.js do online). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="nitidez" color-interpolation-filters="sRGB"><feConvolveMatrix order="3" preserveAlpha="true" kernelMatrix="0 -0.55 0 -0.55 3.2 -0.55 0 -0.55 0"/></filter></svg>
+<header class="topo">
+  <a class="marca" href="/"><img src="/ui/icone.png" alt=""><b>Clipador</b></a>
+  <span style="margin-left:auto"></span>
+  <a class="btn peq" href="/">← Voltar aos cortes</a>
+</header>
+<div class="abas-app" role="tablist" aria-label="Seções">
+  <button type="button" role="tab" aria-selected="true" data-secao="Capas">🖼️ Capas</button>
+  <button type="button" role="tab" aria-selected="false" data-secao="Posts">📅 Postagens</button>
+</div>
+<!-- ===================== CAPAS ===================== -->
+<main class="wrap" id="secCapas">
+  <h1>Capa <span class="grad">no estilo do seu canal</span></h1>
+  <p class="sub">Mande uma capa de referência do seu canal: o Clipador pega as <b>cores</b> dela e monta uma capa <b>parecida, não igual</b>, com a imagem do seu clipe e o seu título.</p>
+  <div class="capa-grade">
+    <aside class="card">
+      <span class="rot">1 · Imagem da capa</span>
+      <div class="miniaturas" id="capaClipes"></div>
+      <p class="dica" id="capaSemClipes" style="margin:6px 0 8px">Gere clipes na aba Vídeos pra usar o momento deles, ou envie uma imagem:</p>
+      <input type="file" id="capaImagem" accept="image/*">
+      <span class="rot">2 · Capa de referência (opcional)</span>
+      <div class="linha" style="gap:6px"><input type="text" id="capaLinkRef" placeholder="Link do vídeo no YouTube ou na Twitch" style="flex:1;min-width:0"><button class="btn peq" id="capaPuxar" type="button">Puxar capa</button></div>
+      <p class="dica" style="margin:6px 0">…ou envie a imagem:</p>
+      <input type="file" id="capaRef" accept="image/*">
+      <img id="capaRefMini" class="ref-mini" alt="Referência" hidden>
+      <div class="paleta" id="paleta" title="Cores tiradas da referência: clique pra usar como destaque"></div>
+      <span class="rot">3 · Texto</span>
+      <input type="text" id="capaTexto" maxlength="60" placeholder="Ex.: ELE NÃO ESPERAVA ISSO" style="width:100%">
+      <span class="rot">Formato</span>
+      <div class="chips" id="capaFormato"><button class="chip" data-cf="yt" aria-pressed="true" type="button">YouTube 16:9</button><button class="chip" data-cf="vert" aria-pressed="false" type="button">Vertical 9:16</button></div>
+      <span class="rot">Estilo</span>
+      <div class="chips" id="capaEstilo"><button class="chip" data-ce="impacto" aria-pressed="true" type="button">Impacto</button><button class="chip" data-ce="neon" aria-pressed="false" type="button">Neon</button><button class="chip" data-ce="limpo" aria-pressed="false" type="button">Limpo</button></div>
+      <span class="rot">Cor de destaque</span>
+      <input type="color" id="capaCor" value="#ffe14d" style="width:100%;height:40px;border-radius:10px;border:1px solid var(--linha2);background:var(--sup2)">
+      <label class="marca-op" style="margin-top:12px"><input type="checkbox" id="capaRosto" checked><span><b>Rosto do streamer em destaque</b><small>Usa a área da webcam marcada no enquadramento.</small></span></label>
+      <label class="marca-op"><input type="checkbox" id="capaSeta" checked><span><b>Seta e brilho</b><small>Chama o olho pro rosto e pro texto.</small></span></label>
+      <button class="btn pri" id="capaBaixar" type="button" style="width:100%;margin-top:6px">⬇ Baixar esta capa (PNG)</button>
+      <button class="btn" id="capaLote" type="button" style="width:100%;margin-top:8px">✨ Gerar 10 capas diferentes</button>
+    </aside>
+    <div class="card"><div class="capa-palco"><canvas id="capaTela" width="1280" height="720"></canvas></div>
+      <p class="dica" style="margin:10px 2px 0">Da referência só saem as cores. A imagem e o texto são seus: nada da capa de outro canal é copiado.</p>
+      <div id="loteBox" hidden><div class="linha" style="justify-content:space-between;margin-top:16px"><b>10 opções</b><button class="btn peq" id="loteBaixar" type="button">⬇ Baixar todas</button></div><div class="lote" id="lote"></div></div></div>
+  </div>
+</main>
+
+<!-- ===================== POSTAGENS ===================== -->
+<main class="wrap" id="secPosts" hidden>
+  <h1>Programe <span class="grad">suas postagens</span> <span class="beta">BETA</span></h1>
+  <p class="sub">Escolha o dia e a hora de cada clipe. O Clipador avisa na hora com a legenda pronta pra colar, e você pode mandar tudo pro Google Agenda ou pro calendário do celular, pra lembrar mesmo com o site fechado.</p>
+  <div class="grade2" style="grid-template-columns:380px 1fr">
+    <aside class="card">
+      <span class="rot">Clipe</span>
+      <select id="postClipe" style="width:100%"></select>
+      <span class="rot">Rede</span>
+      <div class="chips" id="postRede"><button class="chip" data-r="TikTok" aria-pressed="true" type="button">TikTok</button><button class="chip" data-r="Reels" aria-pressed="false" type="button">Reels</button><button class="chip" data-r="Shorts" aria-pressed="false" type="button">Shorts</button></div>
+      <span class="rot">Quando</span>
+      <input type="datetime-local" id="postQuando">
+      <p class="dica" style="margin:6px 0 0">Horários que costumam render: <b>12h</b>, <b>18h</b> e <b>21h</b>. Um clipe por vez, com algumas horas entre eles.</p>
+      <span class="rot">Legenda do post</span>
+      <textarea id="postLegenda" placeholder="Título + hashtags"></textarea>
+      <button class="btn pri" id="postAgendar" type="button" style="width:100%;margin-top:12px">📅 Agendar</button>
+      <p class="dica" style="margin:10px 0 0">Postar sozinho no TikTok, Instagram e YouTube depende da aprovação de cada rede e vem numa próxima versão. Por enquanto o Clipador lembra e deixa tudo pronto pra colar.</p>
+    </aside>
+    <div class="card">
+      <div class="linha" style="justify-content:space-between;margin-bottom:12px"><b>Agenda</b><button class="btn peq" id="postIcsTodos" type="button">📆 Exportar tudo pro calendário (.ics)</button></div>
+      <div class="posts" id="postLista"></div>
+      <p class="dica" id="postVazio">Nada agendado ainda.</p>
+    </div>
+  </div>
+</main>
+
+
+<script>
+// Clipes dos projetos do PC (os mais novos primeiro): imagem = quadro do vídeo ORIGINAL no meio do clipe.
+(async function () {
+  try {
+    var r = await fetch('/api/estudio/clipes'), j = await r.json();
+    window.__clipesGerados = j.clipes || [];
+    window.dispatchEvent(new Event('clipador-clipe'));
+  } catch (_) { window.__clipesGerados = []; }
+  var alvo = (location.hash || '').replace('#', '');
+  if (alvo === 'postagens') setTimeout(function () { var b = document.querySelector('[data-secao=Posts]'); if (b) b.click(); }, 50);
+  else setTimeout(function () { var b = document.querySelector('[data-secao=Capas]'); if (b) b.click(); }, 50);
+})();
+</script>
+<script src="/ui/estudio.js"></script>
+</body>
+</html>
