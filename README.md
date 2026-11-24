@@ -76,10 +76,7 @@ público de uma live (dá pra desligar) e atualizar o baixador de vídeos (yt-dl
 quando um download falha. Os vídeos e os cortes ficam só no computador de quem
 usa.
 
-## Licença e origem
+## Licença
 
-[MIT](LICENSE). O Clipador é feito a partir do código aberto do Cortador
-Automático (© 2026 Gabriel Workspace, licença MIT). Não é afiliado nem
-aprovado pelo Gabriel Workspace. Detalhes em [MARCA.md](MARCA.md).
-O instalador inclui programas de terceiros, cada um com a sua licença:
+[MIT](LICENSE). O instalador inclui programas de terceiros, cada um com a sua licença:
 Node.js, Python, faster-whisper, ffmpeg e yt-dlp.

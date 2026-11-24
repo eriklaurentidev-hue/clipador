@@ -10,8 +10,7 @@
  * Qual pasta vale, nesta ordem:
  *   1. a que a pessoa escolheu nos Ajustes (config.json)
  *   2. a variavel DADOS (o programa instalado aponta pra Videos\Clipador)
- *   3. D:\Clipador, se o D: existir (o C: costuma viver cheio). Se ja existir
- *      D:\CortadorAutomatico (nome antigo), continua nela.
+ *   3. D:\Clipador, se o D: existir (o C: costuma viver cheio).
  *   4. a propria pasta do programa
  */
 
@@ -22,20 +21,15 @@ const path = require('path');
 const RAIZ = path.join(__dirname, '..');
 
 /** O arquivo de configuracao fica fora da pasta de dados: ela pode mudar de lugar. */
-function arquivoConfig(nome) {
+function arquivoConfig() {
   const base = process.platform === 'win32'
-    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), nome || 'Clipador')
-    : path.join(os.homedir(), nome ? '.cortador-automatico' : '.clipador');
+    ? path.join(process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'), 'Clipador')
+    : path.join(os.homedir(), '.clipador');
   return path.join(base, 'config.json');
 }
 
 function lerConfig() {
-  // Sem config do Clipador ainda? Le a do nome antigo (Cortador Automatico),
-  // pra nao perder os ajustes. O proximo gravarConfig ja salva no lugar novo.
-  for (const arq of [arquivoConfig(), arquivoConfig('CortadorAutomatico')]) {
-    try { return JSON.parse(fs.readFileSync(arq, 'utf8')) || {}; } catch (_) { /* tenta o proximo */ }
-  }
-  return {};
+  try { return JSON.parse(fs.readFileSync(arquivoConfig(), 'utf8')) || {}; } catch (_) { return {}; }
 }
 
 function gravarConfig(cfg) {
@@ -48,8 +42,6 @@ function gravarConfig(cfg) {
 function padrao() {
   if (process.env.DADOS) return process.env.DADOS;
   if (process.platform === 'win32' && fs.existsSync('D:/')) {
-    // Nome antigo do programa: se a pasta ja existe, continua nela pra nao perder nada.
-    if (fs.existsSync('D:/CortadorAutomatico')) return 'D:\\CortadorAutomatico';
     return 'D:\\Clipador';
   }
   return RAIZ;
@@ -83,7 +75,7 @@ function mudar(pasta) {
   if (!path.isAbsolute(alvo)) throw new Error('Escolha uma pasta completa, com o disco (ex.: E:\\Cortes).');
   try {
     fs.mkdirSync(alvo, { recursive: true });
-    const teste = path.join(alvo, '.teste-cortador-' + Date.now());
+    const teste = path.join(alvo, '.teste-clipador-' + Date.now());
     fs.writeFileSync(teste, 'ok');
     fs.unlinkSync(teste);
   } catch (e) {

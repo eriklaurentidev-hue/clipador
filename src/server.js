@@ -629,7 +629,7 @@ const servidor = http.createServer(async (req, res) => {
           // canal e titulo do link, pro titulo dos cortes sair com o nome do streamer e do jogo
           try {
             const info = await baixador.espiar(url);
-            fs.writeFileSync(caminho + '.cortador.json', JSON.stringify({ titulo: info.titulo, canal: info.canal, url }), 'utf8');
+            fs.writeFileSync(caminho + '.clipador.json', JSON.stringify({ titulo: info.titulo, canal: info.canal, url }), 'utf8');
           } catch (_) { /* sem isso o titulo so perde o nome do canal */ }
           return caminho;
         })
