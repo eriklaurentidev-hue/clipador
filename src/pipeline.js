@@ -448,6 +448,18 @@ async function processar(opcoes, avisar) {
  * No split, ela precisa cair sobre o gameplay - se ficar colada no rodape
  * some atras da barra de progresso do TikTok.
  */
+/**
+ * Onde o olho ve a divisao entre a webcam e o jogo. Na juncao em degrade e no MEIO
+ * da transicao (a webcam desce um pouco alem da divisao e some), nao no ponto exato.
+ */
+function costuraDaDivisao(formato, recorte) {
+  const topo = legenda.alturaDaDivisao(formato, recorte);
+  if (!topo) return null;
+  if (((recorte && recorte.juncao) || 'degrade') !== 'degrade') return topo;
+  const funde = Math.round(Math.max(80, Math.min(240, topo * 0.24)) / 2) * 2;
+  return topo + Math.round(funde * 0.5);
+}
+
 /** Legenda na divisao entre a webcam e o jogo (so faz sentido no rosto + jogo). */
 function legendaNoMeio(opcoes, formato) {
   return opcoes.posicaoLegenda === 'meio' && formato === 'split' && !!legenda.alturaDaDivisao(formato, opcoes.recorte);
@@ -698,7 +710,7 @@ async function renderizarClipe(ctx, c) {
     let temLegJogo = false;
     try { temLegJogo = (await media.temLegendaQueimada(ctx.video, 0, { inicio: c.inicio, duracao: c.duracao })).tem; } catch (_) {}
     if (temLegJogo) {
-      recorteDoClipe = { ...recorteDoClipe, cortarBaixo: 0.17 };
+      recorteDoClipe = { ...recorteDoClipe, cortarBaixo: 0.22 };
       observacao = observacao ? observacao + ' Escondi a legenda do jogo.' : 'Esse trecho tinha a legenda do jogo: escondi pra não ficar duas.';
     }
   }
@@ -719,9 +731,9 @@ async function renderizarClipe(ctx, c) {
     arquivoAss = 'leg-' + ctx.assinatura + '-' + limparNome(ctx.base) + '.ass';
     legenda.gerarAss(c.palavras || [], c.inicio, path.join(pastas.trabalho(), arquivoAss), {
       // Legenda no MEIO (na divisao entre a webcam e o jogo): letra um pouco menor
-      tamanho: opcoes.tamanhoLegenda || (legendaNoMeio(opcoes, formatoDoClipe) ? 64 : 78),
+      tamanho: opcoes.tamanhoLegenda || (legendaNoMeio(opcoes, formatoDoClipe) ? 70 : 78),
       margemBaixo: legendaNoMeio(opcoes, formatoDoClipe)
-        ? Math.round(1920 - legenda.alturaDaDivisao(formatoDoClipe, opcoes.recorte) - (opcoes.tamanhoLegenda || 64) * 0.55)
+        ? Math.round(1920 - costuraDaDivisao(formatoDoClipe, opcoes.recorte) - (opcoes.tamanhoLegenda || 70) * 0.55)
         : margemDaLegenda(opcoes, formatoDoClipe),
       estiloLegenda: opcoes.estiloLegenda === 'amarela' ? 'amarela' : 'destaque',
       incluirPalavras: querLegenda,
