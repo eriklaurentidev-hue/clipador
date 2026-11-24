@@ -1,0 +1,39 @@
+{
+  "_leia": "Links do painel 'Apoiar o Clipador'. Cole aqui o link do checkout de cada valor (Cakto). Link vazio = botao mostra 'em breve'. Nada aqui e segredo.",
+  "niveis": [
+    {
+      "id": "cafe",
+      "icone": "coffee",
+      "nome": "Café",
+      "valor": "R$ 8",
+      "tipo": "uma vez",
+      "link": "",
+      "texto": "Paga um café pro desenvolvedor e mostra que o Clipador te ajudou.",
+      "leva": ["Um obrigado de verdade", "Mais motivação pra próxima atualização"]
+    },
+    {
+      "id": "lanche",
+      "icone": "pizza",
+      "nome": "Lanche",
+      "valor": "R$ 15",
+      "tipo": "uma vez",
+      "link": "",
+      "texto": "Ajuda a pagar as horas de desenvolvimento das próximas funções.",
+      "leva": ["Tudo do Café", "Seu nome na página de apoiadores (se quiser)"]
+    },
+    {
+      "id": "mensal",
+      "icone": "crown",
+      "nome": "Apoiador mensal",
+      "valor": "R$ 20/mês",
+      "tipo": "assinatura",
+      "link": "",
+      "sugerido": true,
+      "texto": "O apoio que mais ajuda: mantém o Clipador atualizado todo mês, quando Kick, Twitch ou YouTube mudam alguma coisa. Cancela quando quiser.",
+      "leva": ["Tudo do Lanche", "Vota nas próximas funções", "Cancela quando quiser"]
+    }
+  ],
+  "github": "",
+  "site": "https://clipador.eriklaurenti-dev.workers.dev",
+  "email": "suportes.compras@gmail.com"
+}

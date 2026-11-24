@@ -1,0 +1,1012 @@
+'use strict';
+/** Servidor local que serve a janela e roda o processamento. */
+
+const http = require('http');
+const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { spawn, execFile } = require('child_process');
+const { URL } = require('url');
+
+// Onde gravar (disco/pasta) fica no pastas.js: muda na hora, pelos Ajustes.
+const pastas = require('./pastas');
+const desempenho = require('./desempenho');
+
+const { processar, refazerClipe, extrairMais, fontsdirRelativo } = require('./pipeline');
+const legenda = require('./legenda');
+const media = require('./media');
+const baixador = require('./baixar');
+const projetos = require('./projetos');
+const sessoes = require('./sessoes');
+const aovivo = require('./aovivo');
+
+// Um erro solto em algum canto (um ffmpeg que sumiu, uma conexao que caiu)
+// nao pode derrubar o programa inteiro: a janela ficaria dando "Failed to fetch"
+// em tudo. Registra e segue rodando.
+process.on('uncaughtException', (e) => { console.error('[erro solto]', e && e.stack ? e.stack : e); });
+process.on('unhandledRejection', (e) => { console.error('[promessa sem tratamento]', e && e.stack ? e.stack : e); });
+
+const RAIZ = path.join(__dirname, '..');
+// PORT e o nome que as nuvens usam; PORTA e o nosso, pra rodar local.
+const PORTA_INICIAL = Number(process.env.PORT || process.env.PORTA || 4321);
+
+// Em servidor (Docker/nuvem) precisa escutar em tudo; no PC de casa fica so no
+// loopback, a nao ser que a pessoa peca a rede pra usar o celular.
+const NA_REDE = process.env.REDE === '1' || process.env.HOST === '0.0.0.0' || !!process.env.PORT;
+const HOST = NA_REDE ? '0.0.0.0' : '127.0.0.1';
+
+const trabalhos = new Map(); // id -> { eventos: [], ouvintes: Set, terminou }
+
+// A live sendo gravada agora (uma por vez) e quem esta ouvindo os eventos dela
+let aoVivoAtual = null;
+const ouvintesAoVivo = new Set();
+function emitirAoVivo(ev) {
+  const linha = 'data: ' + JSON.stringify(ev) + '\n\n';
+  for (const res of ouvintesAoVivo) {
+    try { res.write(linha); } catch (_) { ouvintesAoVivo.delete(res); }
+  }
+}
+let jobAtivo = false;        // uma transcricao por vez - CPU pesada nao divide bem
+
+// ---------------------------------------------------------------- helpers
+
+function json(res, codigo, corpo) {
+  const texto = JSON.stringify(corpo);
+  res.writeHead(codigo, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(texto),
+    'Cache-Control': 'no-store',
+  });
+  res.end(texto);
+}
+
+// Junta os pedacos como bytes e so no fim vira texto: somar pedaco a pedaco
+// como texto quebrava acento que caisse na divisa entre dois pedacos.
+function lerBytes(req, limite) {
+  return new Promise((resolve, reject) => {
+    const partes = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > limite) { req.destroy(); reject(new Error('corpo grande demais')); return; }
+      partes.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(partes).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
+function lerCorpo(req) {
+  return lerBytes(req, 2e6).then((dados) => {
+    try { return dados ? JSON.parse(dados) : {}; }
+    catch (e) { throw new Error('json invalido'); }
+  });
+}
+
+const TIPOS = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.woff2': 'font/woff2',
+  '.srt': 'text/plain; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
+};
+
+/** Serve arquivo do disco com suporte a Range (o video precisa disso). */
+function servirArquivo(req, res, arquivo) {
+  let st;
+  try { st = fs.statSync(arquivo); } catch (_) { res.writeHead(404); return res.end('nao achei'); }
+
+  const tipo = TIPOS[path.extname(arquivo).toLowerCase()] || 'application/octet-stream';
+  const faixa = req.headers.range;
+
+  if (faixa) {
+    const m = /bytes=(\d*)-(\d*)/.exec(faixa);
+    const ini = m && m[1] ? Number(m[1]) : 0;
+    const fim = m && m[2] ? Number(m[2]) : st.size - 1;
+    res.writeHead(206, {
+      'Content-Type': tipo,
+      'Content-Range': 'bytes ' + ini + '-' + fim + '/' + st.size,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': fim - ini + 1,
+    });
+    return fs.createReadStream(arquivo, { start: ini, end: fim }).pipe(res);
+  }
+
+  const cabecalhos = { 'Content-Type': tipo, 'Content-Length': st.size, 'Accept-Ranges': 'bytes' };
+  // A janela nunca pode vir do cache: senao uma correcao no HTML nao chega
+  // ate o usuario sem ele limpar o navegador na mao.
+  if (/\.(html|js|css)$/i.test(arquivo)) cabecalhos['Cache-Control'] = 'no-store, must-revalidate';
+
+  res.writeHead(200, cabecalhos);
+  fs.createReadStream(arquivo).pipe(res);
+}
+
+/** Devolve um JPG gerado na hora, sem cache pra prévia nunca vir velha. */
+function enviarImagem(res, arquivo) {
+  const dados = fs.readFileSync(arquivo);
+  res.writeHead(200, {
+    'Content-Type': 'image/jpeg',
+    'Content-Length': dados.length,
+    'Cache-Control': 'no-store',
+  });
+  res.end(dados);
+}
+
+// ---------------------------------------------------------------- login
+
+/**
+ * Sem AUTH_SENHA definida, o programa continua exatamente como sempre foi:
+ * ninguem pede senha, uso 100% local. So quando a pessoa expõe isso na
+ * internet (define a variavel) e que a porta da frente tranca sozinha.
+ */
+const AUTH_SENHA = process.env.AUTH_SENHA || '';
+const sessoesValidas = new Set(); // tokens de sessao - em memoria, reseta a cada reinicio
+
+function lerCookies(req) {
+  const cru = req.headers.cookie || '';
+  const mapa = {};
+  for (const par of cru.split(';')) {
+    const i = par.indexOf('=');
+    if (i < 0) continue;
+    mapa[par.slice(0, i).trim()] = decodeURIComponent(par.slice(i + 1).trim());
+  }
+  return mapa;
+}
+
+function estaLogado(req) {
+  if (!AUTH_SENHA) return true;
+  const token = lerCookies(req).sessao;
+  return !!token && sessoesValidas.has(token);
+}
+
+function lerCorpoTexto(req, limite) {
+  return lerBytes(req, limite || 1e5);
+}
+
+function paginaLogin(erro) {
+  return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar</title><style>' +
+    'body{background:#0b0e14;color:#e8eef6;font:15px/1.5 "Segoe UI",system-ui,sans-serif;' +
+    'min-height:100vh;display:grid;place-items:center;margin:0}' +
+    'form{background:#141922;border:1px solid #262e3b;border-radius:14px;padding:28px;width:100%;max-width:320px;box-sizing:border-box}' +
+    'h1{font-size:19px;margin:0 0 18px;display:flex;align-items:center;gap:9px}' +
+    'input{width:100%;padding:11px 12px;border-radius:10px;background:#1b212c;border:1px solid #333d4d;' +
+    'color:#e8eef6;font:inherit;box-sizing:border-box;margin-bottom:12px}' +
+    'button{width:100%;padding:12px;border:none;border-radius:10px;' +
+    'background:linear-gradient(135deg,#ff4d6d,#ff8a5c);color:#fff;font:inherit;font-weight:650;cursor:pointer}' +
+    '.erro{color:#fca5a5;font-size:13px;margin-bottom:12px}' +
+    '</style></head><body>' +
+    '<form method="POST" action="/api/login">' +
+    '<h1>⚡ Clipador</h1>' +
+    (erro ? '<div class="erro">Senha incorreta.</div>' : '') +
+    '<input type="password" name="senha" placeholder="Senha" autofocus required>' +
+    '<button type="submit">Entrar</button>' +
+    '</form></body></html>';
+}
+
+// ---------------------------------------------------------------- upload
+
+// Sem isso, um servidor publico vira um jeito gratuito de qualquer um encher
+// o disco de outra pessoa. 8 GB cobre um video de varias horas em boa qualidade.
+const LIMITE_UPLOAD = Number(process.env.LIMITE_UPLOAD_MB || 8192) * 1024 * 1024;
+
+function nomeDeArquivoSeguro(nome) {
+  const base = path.basename(String(nome || 'video.mp4').replace(/[\\/]/g, '_'));
+  const limpo = base.replace(/[^\w.\-À-ɏ ]+/g, '_').trim();
+  return (limpo || 'video.mp4').slice(0, 120);
+}
+
+/**
+ * O texto da tela vira um .ass pra previa mostrar igual ao clipe final.
+ * @returns {object|null} o "extra" do media.gerarPrevia
+ */
+function textoDaPrevia(textoFixo, sid, formato, recorte) {
+  if (!legenda.temTextoFixo(textoFixo)) return null;
+  fs.mkdirSync(pastas.trabalho(), { recursive: true });
+  const nome = 'previa-texto-' + idDeSessao(sid) + '.ass';
+  legenda.gerarAss([], 0, path.join(pastas.trabalho(), nome), { incluirPalavras: false, textoFixo, alturaDivisao: legenda.alturaDaDivisao(formato, recorte) });
+  return { ass: nome, fontsdir: fontsdirRelativo(), cwd: pastas.trabalho() };
+}
+
+/** Um id curto por sessao de edicao, pra frame/previa de gente diferente nao se pisarem. */
+function idDeSessao(bruto) {
+  const s = String(bruto || 'local').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
+  return s || 'local';
+}
+
+// ---------------------------------------------------------------- programas do windows
+
+// Nao da pra confiar no PATH: dependendo de como o programa foi iniciado, o
+// Node nao acha nem o powershell nem o explorer. Entao apontamos direto.
+const SISTEMA = process.env.SystemRoot || 'C:\\Windows';
+
+function programaDoWindows(relativo, alternativa) {
+  const caminho = path.join(SISTEMA, relativo);
+  return fs.existsSync(caminho) ? caminho : alternativa;
+}
+
+const POWERSHELL = programaDoWindows(
+  path.join('System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), 'powershell.exe');
+const EXPLORER = programaDoWindows('explorer.exe', 'explorer.exe');
+
+// ---------------------------------------------------------------- dialogo nativo
+
+/** Abre a janelinha do Windows pra escolher o video e devolve o caminho. */
+/** O que a janela mostra em "Onde salvar". */
+function estadoArmazenamento() {
+  return {
+    pasta: pastas.dados(),
+    cortes: pastas.saida(),
+    livreGb: pastas.livreAtual(),
+    padrao: pastas.padrao(),
+    discos: pastas.discos(),
+    escolhaDialogo: process.platform === 'win32',
+  };
+}
+
+/**
+ * Roda uma janela do Windows (PowerShell + Windows Forms) e devolve o que a
+ * pessoa escolheu. O caminho volta em Base64 (UTF-8): sem isso, acento no nome
+ * ("C:\\Users\\Rômulo\\Vídeos") chegava como "R?mulo" e o arquivo nao era achado.
+ * @returns {Promise<{ caminho: string|null, cancelou?: boolean, falhou?: string }>}
+ */
+function janelaDoWindows(linhasDoDialogo, propriedade) {
+  return new Promise((resolve) => {
+    const script = [
+      'Add-Type -AssemblyName System.Windows.Forms | Out-Null',
+    ].concat(linhasDoDialogo, [
+      '$t = New-Object System.Windows.Forms.Form',
+      '$t.TopMost = $true',
+      'if ($d.ShowDialog($t) -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output ("OK:" + [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($d.' + propriedade + '))) } else { Write-Output "CANCELOU" }',
+      '$t.Dispose()',
+    ]).join('; ');
+    execFile(POWERSHELL, ['-NoProfile', '-STA', '-Command', script],
+      { windowsHide: true, timeout: 300000 },
+      (erro, saida) => {
+        const texto = String(saida || '').trim();
+        if (/CANCELOU/.test(texto)) return resolve({ caminho: null, cancelou: true });
+        const m = /OK:([A-Za-z0-9+/=]+)/.exec(texto);
+        if (!m) return resolve({ caminho: null, falhou: erro ? String(erro.message).slice(0, 200) : 'a janela do Windows não respondeu' });
+        const caminho = Buffer.from(m[1], 'base64').toString('utf8');
+        if (!fs.existsSync(caminho)) return resolve({ caminho: null, falhou: 'não achei o arquivo escolhido: ' + caminho });
+        resolve({ caminho });
+      });
+  });
+}
+
+/** Janela do Windows pra escolher uma pasta (a de salvar os cortes). */
+function escolherPastaNativa() {
+  return janelaDoWindows([
+    '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
+    '$d.Description = "Escolha onde o Clipador vai salvar os cortes"',
+    '$d.ShowNewFolderButton = $true',
+  ], 'SelectedPath').then((r) => r.caminho);
+}
+
+/** Janela do Windows pra escolher o video. */
+function escolherArquivoNativo() {
+  return janelaDoWindows([
+    '$d = New-Object System.Windows.Forms.OpenFileDialog',
+    '$d.Title = "Escolha o video que voce quer cortar"',
+    '$d.Filter = "Videos|*.mp4;*.mkv;*.mov;*.avi;*.webm;*.m4v;*.wmv;*.flv;*.ts|Todos os arquivos|*.*"',
+    '$d.Multiselect = $false',
+  ], 'FileName');
+}
+
+/** Quando o usuario arrasta o arquivo, o navegador so entrega o nome. Procuramos ele. */
+function localizarPorNome(nome, tamanho) {
+  const casa = os.homedir();
+  const pastas = [
+    path.join(casa, 'Downloads'),
+    path.join(casa, 'Videos'),
+    path.join(casa, 'Desktop'),
+    path.join(casa, 'Documents'),
+    path.join(casa, 'OneDrive', 'Desktop'),
+    path.join(casa, 'OneDrive', 'Documentos'),
+    path.join(casa, 'OneDrive', 'Vídeos'),
+    RAIZ,
+  ];
+
+  const achados = [];
+  for (const pasta of pastas) {
+    const alvo = path.join(pasta, nome);
+    try {
+      const st = fs.statSync(alvo);
+      if (st.isFile()) achados.push({ caminho: alvo, tamanho: st.size });
+    } catch (_) { /* pasta pode nao existir */ }
+  }
+
+  if (!achados.length) return null;
+  if (tamanho) {
+    const exato = achados.find((a) => a.tamanho === tamanho);
+    if (exato) return exato.caminho;
+  }
+  return achados[0].caminho;
+}
+
+// ---------------------------------------------------------------- trabalhos
+
+/**
+ * Resolve um caminho vindo do navegador e garante que ele fica DENTRO da pasta
+ * de saida. path.relative em vez de startsWith: no Linux o filesystem e
+ * case-sensitive (o toLowerCase de antes tanto deixava passar quanto barrava
+ * por engano), e sem checar o separador um irmao do tipo "saida-publico"
+ * passaria no startsWith ingenuo.
+ * @returns {string|null} o caminho absoluto, ou null se estiver fora
+ */
+function dentroDaSaida(caminho) {
+  if (!caminho) return null;
+  const resolvido = path.resolve(String(caminho));
+  const rel = path.relative(path.resolve(pastas.saida()), resolvido);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return null;
+  return resolvido;
+}
+
+function novoTrabalho() {
+  const id = Math.random().toString(36).slice(2, 10);
+  trabalhos.set(id, { eventos: [], ouvintes: new Set(), terminou: false });
+  return id;
+}
+
+function emitir(id, evento) {
+  const t = trabalhos.get(id);
+  if (!t) return;
+  t.eventos.push(evento);
+  const linha = 'data: ' + JSON.stringify(evento) + '\n\n';
+  for (const res of t.ouvintes) {
+    try { res.write(linha); } catch (_) { t.ouvintes.delete(res); }
+  }
+  if (evento.tipo === 'fim' || evento.tipo === 'erro' || evento.tipo === 'baixado') {
+    t.terminou = true;
+    for (const res of t.ouvintes) { try { res.end(); } catch (_) {} }
+    t.ouvintes.clear();
+  }
+}
+
+// ---------------------------------------------------------------- rotas
+
+const servidor = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  const rota = url.pathname;
+
+  try {
+    // O login precisa ficar acessivel mesmo sem sessao valida, senao ninguem
+    // consegue entrar. Todo o resto so roda com a porta destrancada.
+    if (rota === '/api/login' && req.method === 'POST') {
+      const corpoTexto = await lerCorpoTexto(req, 2000);
+      const senha = new URLSearchParams(corpoTexto).get('senha') || '';
+      if (AUTH_SENHA && senha === AUTH_SENHA) {
+        const token = crypto.randomBytes(24).toString('hex');
+        sessoesValidas.add(token);
+        res.writeHead(302, {
+          'Set-Cookie': 'sessao=' + token + '; HttpOnly; Path=/; Max-Age=2592000; SameSite=Lax',
+          'Location': '/',
+        });
+        return res.end();
+      }
+      res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(paginaLogin(true));
+    }
+
+    if (!estaLogado(req)) {
+      if (rota.startsWith('/api/') || rota === '/arquivo') return json(res, 401, { erro: 'Faca login primeiro.' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end(paginaLogin(false));
+    }
+
+    if (rota === '/' || rota === '/index.html') {
+      return servirArquivo(req, res, path.join(__dirname, 'ui', 'index.html'));
+    }
+
+    // PWA: o service worker precisa morar na raiz pra valer pro app inteiro.
+    if (rota === '/sw.js' || rota === '/manifest.webmanifest') {
+      return servirArquivo(req, res, path.join(__dirname, 'ui', rota.slice(1)));
+    }
+
+    // Arquivos da propria interface (lucide.js, css...). So o que esta na
+    // pasta ui, e so o nome do arquivo - nada de subir diretorio.
+    if (/^\/ui\/[\w.-]+$/.test(rota)) {
+      return servirArquivo(req, res, path.join(__dirname, 'ui', path.basename(rota)));
+    }
+
+    // A janela usa isso pra mostrar o endereco do celular e o QR code, e pra
+    // saber se pode oferecer o dialogo nativo (so faz sentido no Windows local).
+    if (rota === '/api/rede') {
+      const porta = servidor.address() ? servidor.address().port : PORTA_INICIAL;
+      return json(res, 200, {
+        naRede: NA_REDE,
+        temDialogoNativo: process.platform === 'win32',
+        porta: porta,
+        enderecos: NA_REDE ? enderecosDaRede().map((ip) => 'http://' + ip + ':' + porta) : [],
+      });
+    }
+
+    // So existe sentido no Windows rodando na mesma maquina que o navegador -
+    // abre uma janela do Windows Forms. Em servidor/Linux isso nao existe.
+    if (rota === '/api/escolher' && req.method === 'POST') {
+      if (process.platform !== 'win32') return json(res, 200, { caminho: null });
+      // { caminho } | { cancelou } | { falhou: motivo }
+      return json(res, 200, await escolherArquivoNativo());
+    }
+
+    if (rota === '/api/localizar' && req.method === 'POST') {
+      if (process.platform !== 'win32') return json(res, 200, { caminho: null });
+      const corpo = await lerCorpo(req);
+      const caminho = localizarPorNome(corpo.nome || '', corpo.tamanho || 0);
+      return json(res, 200, { caminho });
+    }
+
+    // Upload de verdade: o arquivo chega pelo corpo da requisicao e vai direto
+    // pro disco, sem passar pela memoria inteiro. E o caminho que funciona de
+    // qualquer aparelho - celular, notebook, outro computador na rede.
+    if (rota === '/api/upload' && req.method === 'POST') {
+      const tamanho = Number(req.headers['content-length'] || 0);
+      if (tamanho > LIMITE_UPLOAD) {
+        req.destroy();
+        return json(res, 413, { erro: 'Vídeo grande demais (limite de ' + Math.round(LIMITE_UPLOAD / 1048576 / 1024) + ' GB).' });
+      }
+
+      const nome = nomeDeArquivoSeguro(url.searchParams.get('nome'));
+      const pastaDestino = pastas.baixados();
+      fs.mkdirSync(pastaDestino, { recursive: true });
+      const destino = path.join(pastaDestino, Date.now() + '-' + nome);
+
+      const id = novoTrabalho();
+      json(res, 200, { id });
+
+      let recebido = 0;
+      const gravador = fs.createWriteStream(destino);
+      req.on('data', (pedaco) => {
+        recebido += pedaco.length;
+        if (tamanho) {
+          const pct = Math.min(99, Math.round((recebido / tamanho) * 100));
+          emitir(id, { tipo: 'progresso', pct, etapa: 'enviando', msg: 'Enviando... ' + pct + '%' });
+        }
+      });
+      req.on('error', (e) => { gravador.destroy(); emitir(id, { tipo: 'erro', msg: 'Envio interrompido: ' + e.message }); });
+      gravador.on('error', (e) => emitir(id, { tipo: 'erro', msg: 'Falha ao salvar o arquivo: ' + e.message }));
+      gravador.on('finish', () => emitir(id, { tipo: 'baixado', caminho: destino }));
+      req.pipe(gravador);
+      return;
+    }
+
+    if (rota === '/api/verificar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const caminho = String(corpo.caminho || '').replace(/^"+|"+$/g, '').trim();
+      const existe = !!caminho && fs.existsSync(caminho) && fs.statSync(caminho).isFile();
+      return json(res, 200, { existe, caminho });
+    }
+
+    // O perfil de corte que a janela usa
+    if (rota === '/api/sessoes') {
+      return json(res, 200, { sessoes: sessoes.paraJanela() });
+    }
+
+    // ---------------------------------------------------------- ao vivo
+    // Colou um link: e live acontecendo agora, canal offline ou video gravado?
+    if (rota === '/api/checar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      try { return json(res, 200, await aovivo.checarLink(corpo.url)); }
+      catch (e) { return json(res, 400, { erro: e.message }); }
+    }
+
+    if (rota === '/api/aovivo/iniciar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (aoVivoAtual && !aoVivoAtual.parado) {
+        return json(res, 409, { erro: 'Já tem uma live sendo gravada. Pare ela antes de começar outra.' });
+      }
+      const s = new aovivo.SessaoAoVivo(corpo, emitirAoVivo);
+      aoVivoAtual = s;
+      try {
+        await s.iniciar();
+        return json(res, 200, s.resumo());
+      } catch (e) {
+        s.parar(true);
+        aoVivoAtual = null;
+        return json(res, 400, { erro: e.message || String(e) });
+      }
+    }
+
+    if (rota === '/api/aovivo/parar' && req.method === 'POST') {
+      if (aoVivoAtual) aoVivoAtual.parar();
+      return json(res, 200, { ok: true });
+    }
+
+    if (rota === '/api/aovivo/clipar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!aoVivoAtual || aoVivoAtual.parado) return json(res, 400, { erro: 'Nenhuma live sendo gravada.' });
+      try { aoVivoAtual.cliparAgora(corpo.segundos); return json(res, 200, { ok: true }); }
+      catch (e) { return json(res, 400, { erro: e.message }); }
+    }
+
+    if (rota === '/api/aovivo/ajustar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (aoVivoAtual && !aoVivoAtual.parado) aoVivoAtual.ajustar(corpo);
+      return json(res, 200, { ok: true });
+    }
+
+    if (rota === '/api/aovivo/estado') {
+      if (!aoVivoAtual) return json(res, 200, { ativo: false });
+      return json(res, 200, Object.assign({ ativo: !aoVivoAtual.parado, clipes: aoVivoAtual.clipes }, aoVivoAtual.resumo()));
+    }
+
+    // A imagem mais recente da live: previa e marcar onde esta a webcam
+    if (rota === '/api/aovivo/quadro') {
+      const pedacos = aoVivoAtual ? aoVivoAtual.ultimosPedacos(5) : [];
+      if (!pedacos.length) return json(res, 404, { erro: 'Ainda não tem nenhum pedaço da live gravado.' });
+      fs.mkdirSync(pastas.trabalho(), { recursive: true });
+      const alvo = path.join(pastas.trabalho(), 'aovivo-quadro.jpg');
+      // Um pedaco pode nao ter imagem legivel (comecou no meio de um quadro):
+      // tenta os mais novos ate um dar certo, e diz qual foi - o editor usa
+      // esse mesmo pedaco pra previa.
+      let motivo = '';
+      for (const ped of pedacos) {
+        try {
+          await media.gerarFrame(ped, 0.5, alvo, 960);
+          res.setHeader('X-Pedaco', encodeURIComponent(ped));
+          return enviarImagem(res, alvo);
+        } catch (e) { motivo = (e.message || String(e)).split(/\r?\n/).filter(Boolean).pop() || ''; }
+      }
+      return json(res, 502, { erro: 'Não consegui ler a imagem da live (' + motivo.slice(0, 160) + ').' });
+    }
+
+    // Previa do enquadramento em cima da imagem da live
+    if (rota === '/api/aovivo/previa' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const ped = aoVivoAtual && aoVivoAtual.ultimoPedaco();
+      if (!ped) return json(res, 400, { erro: 'Ainda não tem imagem da live.' });
+      fs.mkdirSync(pastas.trabalho(), { recursive: true });
+      const alvo = path.join(pastas.trabalho(), 'aovivo-previa.jpg');
+      await media.gerarPrevia(ped, 0, corpo.formato || 'vertical', corpo.recorte, alvo, textoDaPrevia(corpo.textoFixo, 'aovivo'));
+      return enviarImagem(res, alvo);
+    }
+
+    if (rota === '/api/aovivo/eventos') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      // quem abre a janela no meio da live recebe o estado e os clipes ja feitos
+      if (aoVivoAtual) {
+        res.write('data: ' + JSON.stringify(Object.assign({ tipo: 'estado' }, aoVivoAtual.resumo())) + '\n\n');
+        for (const c of aoVivoAtual.clipes) res.write('data: ' + JSON.stringify({ tipo: 'clipe', clipe: c, antigo: true }) + '\n\n');
+      }
+      ouvintesAoVivo.add(res);
+      const vivo = setInterval(() => { try { res.write(': ping\n\n'); } catch (_) {} }, 20000);
+      req.on('close', () => { clearInterval(vivo); ouvintesAoVivo.delete(res); });
+      return;
+    }
+
+    // Espia o link antes de baixar: titulo e duracao aparecem na hora.
+    if (rota === '/api/espiar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const url = String(corpo.url || '').trim();
+      if (!baixador.pareceLink(url)) return json(res, 400, { erro: 'Isso não parece um link.' });
+      try {
+        if (baixador.ehHls(url)) return json(res, 200, await baixador.espiarHls(url));
+        return json(res, 200, await baixador.espiar(url));
+      } catch (e) {
+        return json(res, 400, { erro: e.message });
+      }
+    }
+
+    // Baixa o video do link. Vira um trabalho com progresso, igual ao corte.
+    if (rota === '/api/baixar' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const url = String(corpo.url || '').trim();
+      if (!baixador.pareceLink(url)) return json(res, 400, { erro: 'Isso não parece um link.' });
+
+      const id = novoTrabalho();
+      json(res, 200, { id });
+
+      const aoProgredir = (frac, msg) => emitir(id, {
+        tipo: 'progresso', pct: Math.round(frac * 100), etapa: 'baixando', msg,
+      });
+      // Replay de live (.m3u8): baixa em paralelo, e da pra pedir so um pedaco
+      const baixando = baixador.ehHls(url)
+        ? baixador.baixarHls(url, {
+          inicio: corpo.inicio == null ? null : Number(corpo.inicio),
+          fim: corpo.fim == null ? null : Number(corpo.fim),
+          nome: corpo.nome,
+        }, aoProgredir)
+        : baixador.baixar(url, { limiteAltura: Number(corpo.limiteAltura) }, aoProgredir);
+
+      baixando
+        .then(async (caminho) => {
+          // canal e titulo do link, pro titulo dos cortes sair com o nome do streamer e do jogo
+          try {
+            const info = await baixador.espiar(url);
+            fs.writeFileSync(caminho + '.cortador.json', JSON.stringify({ titulo: info.titulo, canal: info.canal, url }), 'utf8');
+          } catch (_) { /* sem isso o titulo so perde o nome do canal */ }
+          return caminho;
+        })
+        .then((caminho) => emitir(id, { tipo: 'baixado', caminho }))
+        .catch((e) => emitir(id, { tipo: 'erro', msg: e.message || String(e) }));
+      return;
+    }
+
+    // Mostra na hora como o sistema entendeu o que a pessoa escreveu.
+    if (rota === '/api/entender' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const { interpretar } = require('./intencao');
+      return json(res, 200, interpretar(corpo.descricao || ''));
+    }
+
+    // Duracao e resolucao - a janela usa pra montar o slider de tempo.
+    if (rota === '/api/info' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!corpo.video || !fs.existsSync(corpo.video)) return json(res, 400, { erro: 'video nao encontrado' });
+      try {
+        const info = await media.inspecionar(corpo.video);
+        // Escolhido pela janela: fica liberado pra tocar no player de escolher trecho
+        if (info.temVideo) projetos.liberarVideo(corpo.video);
+        return json(res, 200, info);
+      } catch (e) {
+        return json(res, 400, { erro: 'nao consegui ler esse video: ' + e.message });
+      }
+    }
+
+    // Procura a webcam sozinho. Marcar essa caixa no canto errado estraga
+    // todos os clipes de uma vez e em silencio, entao vale tentar adivinhar
+    // e deixar a pessoa so confirmar na previa.
+    // O video ja vem com legenda na imagem (fala do jogo, legenda de edicao)?
+    if (rota === '/api/checar-legenda' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!corpo.video || !fs.existsSync(corpo.video)) return json(res, 400, { erro: 'video nao encontrado' });
+      try { return json(res, 200, await media.temLegendaQueimada(corpo.video, Number(corpo.duracao) || 0)); }
+      catch (e) { return json(res, 200, { tem: false, erro: e.message }); }
+    }
+
+    if (rota === '/api/achar-webcam' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!corpo.video || !fs.existsSync(corpo.video)) return json(res, 400, { erro: 'video nao encontrado' });
+      try {
+        const achado = await media.acharWebcam(corpo.video, Number(corpo.duracao) || 0);
+        return json(res, 200, achado || { achou: false });
+      } catch (e) {
+        return json(res, 200, { achou: false, erro: e.message });
+      }
+    }
+
+    // Frame cru do video, pro usuario marcar onde esta a webcam e o jogo.
+    // O id de sessao evita que a previa de uma pessoa sobrescreva a da outra
+    // quando o servidor atende mais de um navegador ao mesmo tempo.
+    if (rota === '/api/frame' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!corpo.video || !fs.existsSync(corpo.video)) return json(res, 400, { erro: 'video nao encontrado' });
+
+      fs.mkdirSync(pastas.trabalho(), { recursive: true });
+      const alvo = path.join(pastas.trabalho(), 'frame-' + idDeSessao(corpo.sid) + '.jpg');
+      await media.gerarFrame(corpo.video, Number(corpo.segundo) || 0, alvo, 960);
+      return enviarImagem(res, alvo);
+    }
+
+    // Frame ja montado no formato final, pra conferir antes de gerar tudo.
+    if (rota === '/api/previa' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (!corpo.video || !fs.existsSync(corpo.video)) return json(res, 400, { erro: 'video nao encontrado' });
+
+      fs.mkdirSync(pastas.trabalho(), { recursive: true });
+      const alvo = path.join(pastas.trabalho(), 'previa-' + idDeSessao(corpo.sid) + '.jpg');
+      await media.gerarPrevia(corpo.video, Number(corpo.segundo) || 0,
+        corpo.formato || 'vertical', corpo.recorte, alvo, textoDaPrevia(corpo.textoFixo, corpo.sid, corpo.formato || 'vertical', corpo.recorte));
+      return enviarImagem(res, alvo);
+    }
+
+    if (rota === '/api/processar' && req.method === 'POST') {
+      // Duas transcricoes ao mesmo tempo nao dividem CPU de graca: as duas
+      // ficam mais lentas e a memoria pode estourar. Um job de cada vez.
+      if (jobAtivo) return json(res, 429, { erro: 'Já tem um vídeo sendo processado. Espere terminar antes de mandar outro.' });
+
+      const opcoes = await lerCorpo(req);
+      const id = novoTrabalho();
+      json(res, 200, { id });
+
+      jobAtivo = true;
+      processar(opcoes, (ev) => emitir(id, ev))
+        .catch((e) => emitir(id, { tipo: 'erro', msg: e.message || String(e) }))
+        .finally(() => { jobAtivo = false; });
+      return;
+    }
+
+    // Refaz UM clipe com outro gancho e/ou outro comeco e fim. Nao transcreve
+    // nada de novo - reaproveita a transcricao guardada, entao leva segundos.
+    if (rota === '/api/refazer' && req.method === 'POST') {
+      if (jobAtivo) return json(res, 429, { erro: 'Espere o video que esta sendo processado terminar.' });
+
+      const corpo = await lerCorpo(req);
+      // A janela manda o caminho do proprio clipe; a pasta sai daqui. Deixar
+      // o navegador separar pasta de arquivo daria errado em algum sistema -
+      // path.dirname ja sabe fazer isso certo no Windows e no Linux.
+      const arquivo = dentroDaSaida(corpo.arquivo);
+      if (!arquivo || !fs.existsSync(arquivo)) {
+        return json(res, 400, { erro: 'Nao achei o arquivo desse clipe.' });
+      }
+      const pasta = path.dirname(arquivo);
+
+      const id = novoTrabalho();
+      json(res, 200, { id });
+
+      jobAtivo = true;
+      refazerClipe({
+        pasta: pasta,
+        numero: corpo.numero,
+        inicio: corpo.inicio,
+        duracao: corpo.duracao,
+        gancho: corpo.gancho,
+        // legenda palavra por palavra neste clipe e o que a pessoa corrigiu nela
+        legendar: typeof corpo.legendar === 'boolean' ? corpo.legendar : undefined,
+        edicoes: corpo.edicoes && typeof corpo.edicoes === 'object' ? corpo.edicoes : undefined,
+      }, (ev) => emitir(id, ev))
+        .then((pronto) => {
+          // Clipe da live que ainda esta gravando: a live guarda a lista dos
+          // clipes na memoria e regrava a pasta a cada clipe novo - sem isso,
+          // o proximo clipe desfaria a edicao.
+          if (aoVivoAtual && pronto && aoVivoAtual.pasta && path.resolve(aoVivoAtual.pasta) === path.resolve(pasta)) {
+            aoVivoAtual.atualizarClipe(pronto);
+          }
+          emitir(id, { tipo: 'fim' });
+        })
+        .catch((e) => emitir(id, { tipo: 'erro', msg: e.message || String(e) }))
+        .finally(() => { jobAtivo = false; });
+      return;
+    }
+
+    // ---------------------------------------------------------- projetos
+    // Tudo que ja foi gerado, pra reabrir sem baixar nem transcrever de novo.
+    if (rota === '/api/projetos') {
+      return json(res, 200, { projetos: projetos.listar(url.searchParams.get('sessao')) });
+    }
+
+    if (rota === '/api/projeto') {
+      const p = projetos.abrir(url.searchParams.get('pasta'));
+      if (!p) return json(res, 404, { erro: 'Não achei esse projeto. A pasta pode ter sido apagada ou movida.' });
+      return json(res, 200, p);
+    }
+
+    // O video pra assistir no editor: o de um projeto (?pasta=) ou o que acabou
+    // de ser escolhido na janela (?caminho=). Com Range, pra dar pra pular.
+    const fonteDaUrl = () => ({ pasta: url.searchParams.get('pasta'), caminho: url.searchParams.get('caminho'), clipe: url.searchParams.get('clipe') });
+
+    if (rota === '/api/video') {
+      const video = projetos.videoDe(fonteDaUrl());
+      if (!video) { res.writeHead(404); return res.end('esse video nao esta disponivel'); }
+      return servirArquivo(req, res, video);
+    }
+
+    // Uma imagem da tira da linha do tempo do editor.
+    if (rota === '/api/quadro') {
+      const img = await projetos.quadro(fonteDaUrl(), url.searchParams.get('t'));
+      if (!img) { res.writeHead(404); return res.end(); }
+      return servirArquivo(req, res, img);
+    }
+
+    if (rota === '/api/palavras') {
+      const r = projetos.palavras(fonteDaUrl(), url.searchParams.get('de'), url.searchParams.get('ate'));
+      if (!r) return json(res, 404, { erro: 'Esse vídeo não está disponível.' });
+      return json(res, 200, r);
+    }
+
+    // Mais cortes de um projeto que ja existe, sem repetir trecho - do video
+    // todo, ou so de um trecho marcado.
+    if (rota === '/api/projeto/mais' && req.method === 'POST') {
+      if (jobAtivo) return json(res, 429, { erro: 'Já tem um vídeo sendo processado. Espere terminar antes de pedir mais cortes.' });
+
+      const corpo = await lerCorpo(req);
+      const pasta = projetos.pastaDoProjeto(corpo.pasta);
+      if (!pasta) return json(res, 400, { erro: 'Não achei esse projeto.' });
+
+      const id = novoTrabalho();
+      json(res, 200, { id });
+
+      jobAtivo = true;
+      extrairMais({
+        pasta: pasta,
+        quantidade: corpo.quantidade,
+        minDur: corpo.minDur,
+        maxDur: corpo.maxDur,
+        trecho: corpo.trecho,
+        modo: corpo.modo,
+      }, (ev) => emitir(id, ev))
+        .catch((e) => emitir(id, { tipo: 'erro', msg: e.message || String(e) }))
+        .finally(() => { jobAtivo = false; });
+      return;
+    }
+
+    if (rota === '/api/eventos') {
+      const id = url.searchParams.get('id');
+      const t = trabalhos.get(id);
+      if (!t) { res.writeHead(404); return res.end(); }
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      // manda o que ja passou, pra quem reconectar nao perder nada
+      for (const ev of t.eventos) res.write('data: ' + JSON.stringify(ev) + '\n\n');
+      if (t.terminou) return res.end();
+
+      t.ouvintes.add(res);
+      req.on('close', () => t.ouvintes.delete(res));
+      return;
+    }
+
+    // Resumo do trabalho mais recente, pra quem acompanha de fora (o Coucou, na
+    // borda da tela) sem saber o id: etapa e % enquanto roda, e o resultado no fim.
+    if (rota === '/api/atual') {
+      const ultimo = [...trabalhos.entries()].pop();
+      if (!ultimo) return json(res, 200, { id: null, ativo: jobAtivo });
+      const [id, t] = ultimo;
+      const progresso = [...t.eventos].reverse().find((e) => e.tipo === 'progresso') || null;
+      const final = [...t.eventos].reverse().find((e) => e.tipo === 'fim' || e.tipo === 'erro' || e.tipo === 'baixado') || null;
+      return json(res, 200, {
+        id,
+        ativo: jobAtivo,
+        terminou: t.terminou,
+        progresso: progresso && { pct: progresso.pct, etapa: progresso.etapa, msg: progresso.msg },
+        fim: final && {
+          tipo: final.tipo,
+          pasta: final.pasta || null,
+          clipes: Array.isArray(final.clipes) ? final.clipes.length : null,
+          msg: final.msg || null,
+        },
+      });
+    }
+
+    if (rota === '/api/abrir' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const alvo = String(corpo.caminho || pastas.saida());
+      // No Windows local, abre o Explorer de verdade. Em servidor isso nao
+      // existe (abriria uma janela na maquina do servidor, que ninguem ve) -
+      // devolvemos o link de download pra pessoa baixar o clipe direto.
+      if (process.platform === 'win32' && fs.existsSync(alvo)) {
+        const st = fs.statSync(alvo);
+        if (st.isDirectory()) execFile(EXPLORER, [alvo], () => {});
+        else execFile(EXPLORER, ['/select,', alvo], () => {});
+      }
+      return json(res, 200, { ok: true, url: '/arquivo?p=' + encodeURIComponent(alvo) });
+    }
+
+    if (rota === '/arquivo') {
+      const p = url.searchParams.get('p');
+      if (!p) { res.writeHead(400); return res.end(); }
+      const resolvido = dentroDaSaida(p);
+      if (!resolvido) { res.writeHead(403); return res.end('fora da pasta de saida'); }
+      return servirArquivo(req, res, resolvido);
+    }
+
+    if (rota === '/api/saida') {
+      return json(res, 200, { pasta: pastas.saida() });
+    }
+
+    // ---------------------------------------------------------- modo leve / total
+    // Quanto do processador o programa usa (escolhido na primeira vez que abre)
+    if (rota === '/api/desempenho' && req.method === 'GET') {
+      return json(res, 200, desempenho.resumo());
+    }
+    if (rota === '/api/desempenho' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      try {
+        if (corpo.modo) desempenho.definir(corpo.modo);
+        if (typeof corpo.placa === 'boolean') desempenho.definirPlaca(corpo.placa);
+        return json(res, 200, desempenho.resumo());
+      } catch (e) {
+        return json(res, 400, { erro: e.message });
+      }
+    }
+
+    // ---------------------------------------------------------- onde salvar
+    // A pasta de dados (cortes, downloads, gravacao da live) e os discos do PC
+    if (rota === '/api/armazenamento' && req.method === 'GET') {
+      return json(res, 200, estadoArmazenamento());
+    }
+
+    // Janela do Windows pra escolher uma pasta
+    if (rota === '/api/armazenamento/escolher' && req.method === 'POST') {
+      if (process.platform !== 'win32') return json(res, 200, { pasta: null });
+      return json(res, 200, { pasta: await escolherPastaNativa() });
+    }
+
+    // Passa a gravar em outra pasta (vale na hora, sem reiniciar)
+    if (rota === '/api/armazenamento' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      if (jobAtivo) return json(res, 409, { erro: 'Espere terminar o vídeo que está sendo cortado antes de trocar a pasta.' });
+      if (aoVivoAtual && !aoVivoAtual.parado) return json(res, 409, { erro: 'Pare a live que está sendo gravada antes de trocar a pasta.' });
+      try {
+        pastas.mudar(corpo.padrao ? null : corpo.pasta);
+        return json(res, 200, estadoArmazenamento());
+      } catch (e) {
+        return json(res, 400, { erro: e.message });
+      }
+    }
+
+    res.writeHead(404);
+    res.end('nao achei');
+  } catch (e) {
+    json(res, 500, { erro: e.message || String(e) });
+  }
+});
+
+// ---------------------------------------------------------------- subir
+
+/** IPs da maquina na rede local - e por eles que o celular acha o programa. */
+function enderecosDaRede() {
+  const saida = [];
+  const redes = os.networkInterfaces();
+  for (const nome of Object.keys(redes)) {
+    for (const i of redes[nome] || []) {
+      if (i.family === 'IPv4' && !i.internal) saida.push(i.address);
+    }
+  }
+  return saida;
+}
+
+function subir(porta, tentativas) {
+  servidor.listen(porta, HOST);
+  servidor.once('error', (e) => {
+    if (e.code === 'EADDRINUSE' && tentativas > 0) {
+      servidor.removeAllListeners('listening');
+      subir(porta + 1, tentativas - 1);
+    } else {
+      console.error('Nao consegui subir o servidor:', e.message);
+      process.exit(1);
+    }
+  });
+  servidor.once('listening', () => {
+    const endereco = 'http://127.0.0.1:' + porta;
+    console.log('');
+    console.log('  Clipador rodando em ' + endereco);
+
+    if (NA_REDE) {
+      for (const ip of enderecosDaRede()) {
+        console.log('  No celular (mesma rede wi-fi):  http://' + ip + ':' + porta);
+      }
+    } else {
+      console.log('  Para abrir no celular na mesma rede, inicie com REDE=1.');
+    }
+
+    console.log('  Deixe esta janela preta aberta enquanto usa o programa.');
+    console.log('');
+    if (process.env.NAO_ABRIR !== '1') abrirJanela(endereco);
+  });
+}
+
+/** Abre em modo app (sem barra de endereco) - parece um programa de verdade. */
+function abrirJanela(endereco) {
+  if (process.platform !== 'win32') return; // servidor nao tem tela pra abrir nada
+
+  const navegadores = [
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  ];
+
+  for (const nav of navegadores) {
+    if (fs.existsSync(nav)) {
+      spawn(nav, ['--app=' + endereco, '--window-size=1180,880'], { detached: true, stdio: 'ignore' }).unref();
+      return;
+    }
+  }
+  execFile('cmd', ['/c', 'start', '', endereco], { windowsHide: true }, () => {});
+}
+
+aovivo.limparSobras();
+// testa a placa de video em segundo plano (meio segundo de video), pra opcao dos Ajustes
+media.garantirFfmpeg().then(({ ffmpeg }) => desempenho.detectarPlaca(ffmpeg)).catch(() => {});
+subir(PORTA_INICIAL, 20);

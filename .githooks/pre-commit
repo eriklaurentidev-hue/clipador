@@ -1,0 +1,12 @@
+#!/bin/sh
+# Trava de segredos: bloqueia o commit se algum arquivo novo/alterado tiver cara de chave ou senha.
+# (ativada com: git config core.hooksPath .githooks)
+PADRAO='sb_secret_[A-Za-z0-9_-]{10,}|service_role|eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{10,}|AIza[0-9A-Za-z_-]{30,}|re_[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|sk_live_[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|-----BEGIN (RSA |EC )?PRIVATE KEY-----'
+ACHOU=$(git diff --cached --name-only --diff-filter=ACM -z | xargs -0 -r grep -nIE "$PADRAO" -- 2>/dev/null | grep -v '^\.githooks/' | grep -viE 'nunca|exemplo|gire|PADRAO')
+NOMES=$(git diff --cached --name-only --diff-filter=ACM | grep -iE '(^|/)\.env$|PRIVADO|SENHA|credentials\.json|\.pem$|\.key$')
+if [ -n "$ACHOU$NOMES" ]; then
+  echo "COMMIT BLOQUEADO: parece ter chave/senha nestes arquivos:"; echo "$ACHOU" | cut -c1-160; echo "$NOMES"
+  echo "Tire o segredo (use .env) e tente de novo. Se for falso alarme: git commit --no-verify"
+  exit 1
+fi
+exit 0

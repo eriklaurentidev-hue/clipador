@@ -1,0 +1,73 @@
+# Monta o instalador do Clipador no proprio GitHub, a partir do
+# codigo publico, e publica no Releases.
+#
+# Roda sozinho quando sai uma tag de versao (ex.: git tag v2.0.1 && git push
+# origin v2.0.1) ou na mao, pela aba Actions ("Run workflow").
+#
+# Montar aqui, e nao no PC de alguem, e o que permite pedir assinatura gratis
+# de codigo aberto (SignPath Foundation): da pra provar que o .exe saiu deste
+# codigo. Quando a SignPath aprovar o projeto, o passo de assinatura entra
+# entre "Montar o instalador" e "Publicar no Releases".
+
+name: Instalador
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  montar:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Baixar o codigo
+        uses: actions/checkout@v4
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Python 3.12
+        id: py
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Baixar os modelos de fala (small e base)
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check faster-whisper==1.2.1
+          python -c "from faster_whisper import WhisperModel; [WhisperModel(m, device='cpu', compute_type='int8', download_root='modelos') for m in ('small', 'base')]; print('modelos prontos')"
+
+      - name: Montar o instalador
+        shell: pwsh
+        env:
+          PYTHON_BIN: ${{ steps.py.outputs.python-path }}
+        run: node instalador/montar.js
+
+      - name: Guardar o instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: Instalar-Clipador
+          path: instalador/dist/Instalar-Clipador.exe
+          retention-days: 14
+
+      - name: Publicar no Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $exe = 'instalador/dist/Instalar-Clipador.exe'
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $exe --clobber
+          } else {
+            gh release create $tag $exe --title "Clipador $tag" --notes "Baixe o Instalar-Clipador.exe e instale. Tudo vem dentro: nao precisa instalar mais nada."
+          }

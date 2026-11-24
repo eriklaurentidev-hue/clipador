@@ -1,0 +1,586 @@
+===========================================================
+  CLIPADOR
+  Live da Kick, Twitch ou YouTube entra, cortes em pé saem
+  (gravada ou AO VIVO)
+===========================================================
+
+Tudo roda no seu PC: sem conta, sem chave de API, sem mensalidade.
+A internet só é usada pra pegar o vídeo da live (e, se você deixar,
+ler o chat público dela, que nem qualquer visitante).
+
+
+COMO ABRIR
+----------
+
+1. Dê dois cliques em:   iniciar.bat
+2. Vai abrir uma janela preta (deixe ela aberta!) e, logo depois,
+   a janela do programa.
+
+No topo da janela tem:
+   - o campo pra COLAR O LINK (live ou vídeo) e o botão "Ir"
+   - PROJETOS: tudo que já foi cortado
+   - AJUSTES: onde salvar, uso do processador, legenda, velocidade...
+
+Cole qualquer link no topo e aperte "Ir": o programa descobre sozinho
+se é uma live acontecendo agora, um canal offline ou um vídeo gravado,
+e leva você pro lugar certo.
+
+Logo abaixo tem as duas abas:
+
+   VÍDEO GRAVADO   live que já acabou (VOD) ou arquivo do computador
+   AO VIVO AGORA   clipa enquanto a live acontece
+
+
+AO VIVO AGORA (pra postar primeiro)
+-----------------------------------
+
+1. Cole o link do CANAL (twitch.tv/canal, kick.com/canal ou
+   youtube.com/@canal/live) e aperte CONECTAR.
+2. A imagem da live aparece. Escolha o formato do clipe:
+      Rosto + jogo      webcam em cima, gameplay embaixo
+      Só uma área       você marca a parte que quer focar
+      Tela cheia        corta as laterais
+      Vídeo inteiro     o vídeo deitado no meio, fundo borrado
+      Sem mexer         o vídeo deitado, do jeito que veio
+   Em "Rosto + jogo" e "Só uma área", arraste a caixa do ROSTO e a do
+   JOGO (ou da ÁREA) em cima da imagem. A prévia ao lado mostra como o
+   clipe vai sair. "Pegar uma imagem mais nova" troca a imagem.
+3. Se quiser, escreva o TEXTO FIXO (veja abaixo).
+4. Aperte COMEÇAR A CLIPAR.
+
+Enquanto você configura, ele já está guardando a live: nada se perde.
+
+A partir daí o programa grava a live por trás (guarda os últimos 20
+minutos) e você tem duas formas de clipar:
+
+   CLIPAR AGORA (ou a tecla C)
+      Viu o lance? Aperte. Ele corta os últimos 20s / 30s / 45s /
+      1 min / 1:30 (você escolhe embaixo do botão). O clipe fica
+      pronto em uns 10 a 20 segundos.
+
+   AUTOMÁTICO
+      Ele olha o chat (Twitch e Kick) e o volume do streamer. Quando
+      o chat explode e/ou o streamer grita, ele corta sozinho: uns
+      70% antes do lance e 30% depois, pra pegar a reação.
+      "Só os lances grandes" corta menos; "Tudo que mexer" corta mais.
+      O termômetro mostra o nível na hora; a linha branca é onde
+      ele dispara.
+
+Cada clipe aparece na tela com um aviso sonoro, já em pé, com botão
+pra baixar e pra copiar a legenda do post (título + hashtags; se a live
+for de GTA, entram #gta6 #gtavi #gta).
+O título é sugerido uns segundos depois, ouvindo a fala do clipe.
+
+Junto de cada clipe fica uma versão deitada (-original.mp4), pra quem
+quiser editar no próprio editor.
+
+Coisas boas de saber:
+   - TWITCH: quem assiste sem login vê anúncio. O programa reconhece o
+     anúncio e pula ele: nenhum clipe sai com anúncio. Durante o
+     anúncio a Twitch não manda a live, então esse pedaço não grava.
+   - YOUTUBE: o chat não é lido; o automático usa só o volume.
+   - KICK: se o chat não conectar, aparece um aviso e o automático
+     segue só pelo volume.
+   - Uma live por vez. Pode trocar formato e webcam com a live rodando
+     (botão "Ajustar enquadramento"), sem parar de gravar.
+   - Fechou a janela do programa? A gravação continua enquanto a
+     janela preta estiver aberta. Abra de novo e o painel volta.
+
+
+TEXTO FIXO NA TELA (nos dois modos)
+-----------------------------------
+
+Um texto que vai em todo clipe, por cima do vídeo: "AO VIVO AGORA",
+"@seucanal", o nome do streamer...
+   Onde           em cima, no meio ou embaixo
+   Quanto tempo   o clipe todo, ou só os 5 primeiros segundos
+   Cor            branco ou amarelo
+   Tamanho        pequeno, médio ou grande
+Use / pra quebrar a linha:  AO VIVO AGORA / @seucanal
+Ele aparece na prévia do enquadramento igual vai sair no clipe.
+Não sai no formato "Sem mexer".
+No vídeo gravado ele fica na etapa 3; no ao vivo, embaixo dos ajustes.
+
+
+VÍDEO GRAVADO
+-------------
+
+1. Cole o link do VOD (twitch.tv/videos/..., kick.com/canal/videos/...,
+   youtube.com/...) ou escolha um arquivo do computador.
+2. O programa te leva por 3 telas:
+      1 - Vídeo          de onde ele vem
+      2 - Enquadramento  como a tela vai ficar
+      3 - O que cortar   perseguição, assalto, engraçado, deu ruim,
+                         bug, reação forte... (pode marcar vários)
+3. Clique em "Gerar os cortes" e espere. Ele vai:
+      - separar o áudio
+      - ouvir e transcrever o vídeo inteiro
+      - achar os melhores momentos
+      - cortar, enquadrar em 9:16 e gravar a legenda
+4. No fim aparecem os clipes, cada um com nota de 0 a 100, título
+   sugerido, o minuto de onde saiu e botões de baixar e copiar.
+5. Não gostou de algum? "Editar" no cartão do clipe.
+
+
+ONDE FICAM OS ARQUIVOS (e como trocar o disco)
+----------------------------------------------
+
+Em Ajustes > "Onde salvar" aparecem os discos do PC com o espaço livre
+de cada um. Clique num disco (ex.: E:) ou em "Escolher outra pasta".
+Vale na hora, sem fechar o programa. Dentro da pasta escolhida ficam:
+
+   saida\cortes\    os cortes (cada projeto numa pasta)
+   baixados\        vídeos baixados por link
+   ao-vivo\         a gravação temporária da live (apagada ao parar)
+   trabalho\        áudio e transcrições (dá pra apagar se precisar)
+
+O que já foi salvo na pasta antiga continua lá. "Padrão" volta pra
+pasta de sempre. Não dá pra trocar no meio de um corte ou de uma live.
+
+
+EDITAR OS CLIPES DA LIVE
+------------------------
+
+Uns segundos depois que o clipe ao vivo fica pronto, o botão "Editar"
+dele libera (ele espera a live gravar mais 10s depois do lance). Cada
+clipe guarda uma versão deitada com 10s antes e 10s depois, então no
+editor dá pra voltar e avançar o começo e o fim, mudar o texto da tela
+e corrigir a legenda. Funciona com a live ainda gravando e depois, pelo
+botão Projetos.
+
+
+CORRIGIR A LEGENDA (vídeo gravado e ao vivo)
+--------------------------------------------
+
+No editor de qualquer clipe tem "Legenda palavra por palavra" (liga ou
+desliga só naquele clipe) e "Corrigir a legenda": cada palavra dita
+dentro do corte aparece num campinho. Clique, corrija e aperte "Refazer
+este clipe". Apagar o texto de uma palavra tira ela da legenda.
+
+QUANTO TEMPO DEMORA
+-------------------
+
+  Vídeo de 10 min  ->  uns 4 minutos
+  Vídeo de 30 min  ->  uns 12 minutos
+  Vídeo de 60 min  ->  uns 25 minutos
+
+A parte demorada é a transcrição. Se rodar o MESMO vídeo de novo,
+ele reaproveita a transcrição e fica quase instantâneo — bom pra
+testar outro formato ou outra quantidade de cortes.
+
+
+CARTÃO COM O NOME DO STREAMER
+-----------------------------
+
+No formato rosto + jogo, escreva o nome do streamer em "Cartão com o
+nome do streamer" (no enquadramento). Ele aparece num cartão azul na
+linha entre a webcam e o jogo, em todos os cortes (gravado e ao vivo).
+Deixe vazio pra não usar.
+
+PLACA DE VÍDEO (gerar os cortes mais rápido)
+--------------------------------------------
+
+Em Ajustes > "Uso do processador" tem "Usar a placa de vídeo pra gerar
+os cortes". O programa testa sozinho se o seu PC tem placa NVIDIA, AMD
+ou Intel que funcione. Ligado, os cortes ficam prontos até 3x mais
+rápido. A transcrição continua no processador. Se a placa falhar num
+corte, ele é refeito no processador sem você precisar fazer nada.
+
+
+TÍTULOS E GANCHOS DOS CORTES DE JOGO
+------------------------------------
+
+Em live de jogo o título sai no formato que a busca entende: o nome do
+streamer + o jogo + o que aconteceu ("Fulano não aguentou de rir nessa
+no Valorant"). O jogo vem do título da live; o streamer, do canal.
+Quando a fala vem embaralhada pelo som do jogo, ele não usa a frase
+quebrada. Na escolha dos momentos pesam mais a risada, o grito e o
+pico de reação do que a frase bonita. Dá pra trocar tudo no editor.
+
+O YOUTUBE PEDIU LOGIN ("confirme que não é um robô")
+-------------------------------------------------
+
+Às vezes o YouTube pede essa confirmação. O programa tenta outros
+caminhos sozinho e, se precisar, usa o login que você já tem no
+navegador (Firefox, Edge ou Chrome) só pra baixar, aqui no seu PC.
+Se continuar: abra o YouTube no navegador, entre na sua conta e tente
+de novo. Ou baixe o vídeo por fora e use "Arquivo do PC".
+
+
+A IA PODE COMETER FALHAS
+------------------------
+
+A legenda, os títulos e a escolha dos momentos são feitos por IA e
+podem ter erros, principalmente com o som do jogo alto por cima da
+voz. Confira antes de postar: no editor dá pra corrigir tudo.
+
+MODO LEVE OU PROCESSADOR TOTAL
+------------------------------
+
+Na primeira vez que abre, o programa mostra o seu PC (processador,
+núcleos e RAM) e pergunta como ele deve usar o processador:
+
+  Modo leve          metade do processador, com prioridade baixa.
+                     Demora mais, mas o PC esquenta bem menos e dá
+                     pra usar ele enquanto corta. Pra notebook ou PC
+                     com até 8 GB de RAM, 2 a 4 núcleos, ou que
+                     esquenta, trava ou desliga enquanto gera cortes.
+
+  Processador total  quase todo o processador. Mais rápido. Pra PC
+                     com 16 GB de RAM ou mais e 6 núcleos ou mais.
+
+Dá pra trocar quando quiser em Ajustes > "Uso do processador".
+A gravação da live nunca fica mais lenta: só a geração dos cortes.
+
+Se o PC DESLIGA sozinho enquanto gera os cortes, é o processador
+esquentando demais (ou a fonte não aguentando): use o modo leve,
+limpe a poeira do cooler e deixe o PC ventilado.
+
+
+O QUE CADA OPÇÃO FAZ
+--------------------
+
+FORMATO
+  Rosto + jogo   <- o padrão
+      O formato clássico de corte de streamer: a webcam ocupa a
+      parte de cima e o gameplay a de baixo, com uma linha dividindo
+      as duas. Você marca na tela onde fica cada coisa (veja abaixo).
+
+  Só uma área
+      Você marca um pedaço da tela e ele enquadra só aquilo.
+      Bom quando não tem webcam e o que importa é uma parte do jogo.
+
+  Tela cheia
+      Corta as laterais e preenche a tela do celular. Use quando a
+      pessoa estiver mais ou menos no centro da imagem.
+
+  Não mexer
+      Só fatia o vídeo, sem mexer no enquadramento. Sem legenda,
+      esse modo copia o vídeo bit a bit: ZERO perda de qualidade
+      e sai em segundos.
+
+QUALIDADE DO VÍDEO
+  Máxima  - CRF 15, escala lanczos, áudio 256k. Sem perda visível.
+            É o padrão. Renderiza mais devagar.
+  Alta    - CRF 18. Diferença imperceptível, cerca de 2x mais rápida.
+  Rápida  - CRF 23. Só se estiver com pressa ou sem espaço.
+
+  Obs: sempre que o vídeo é reenquadrado (split, vertical, blur) ou
+  ganha legenda queimada, ele precisa ser recodificado - não existe
+  como desenhar por cima sem regravar. No Máxima essa regravação é
+  visualmente transparente. Se você quer o arquivo intocado mesmo,
+  use "Manter o formato original" sem legenda: aí é cópia exata.
+
+
+AJUSTE DO ENQUADRAMENTO (formato Split)
+---------------------------------------
+
+Depois de escolher o vídeo, aparece um frame dele com duas caixas:
+
+  ROSTO (azul)  - arraste em cima da sua webcam
+  JOGO  (verde) - arraste em cima da área do jogo
+
+Arraste pelo meio da caixa pra mover, e puxe o quadradinho do canto
+pra mudar o tamanho. Tem também botões de atalho pros 4 cantos, caso
+sua webcam fique num deles (que é o normal).
+
+  Ver outro trecho   - troca o frame que aparece, caso o começo do
+                       vídeo seja uma tela de abertura. Tem atalho
+                       pro Começo, Meio e Fim.
+  Altura do rosto    - quanto da tela o rosto ocupa (padrão 32%)
+  Linha divisória    - grossura e cor da linha entre as duas partes
+
+A prévia do lado mostra como o corte vai sair, e se atualiza sozinha
+conforme você mexe. Vale conferir na primeira vez com um canal novo -
+evita gerar 8 clipes com o enquadramento errado.
+
+O ajuste vale pra todos os cortes daquele vídeo, e fica salvo pra
+próxima vez que você abrir o programa.
+
+
+QUANDO ELE APARECE EM TELA CHEIA
+--------------------------------
+
+Muito streamer alterna: às vezes é webcam pequena + gameplay, às vezes
+ele joga a cara em tela cheia. Se o programa aplicasse o split nesses
+trechos, ele pegaria dois pedaços do rosto e empilharia um em cima do
+outro - o rosto sairia cortado duas vezes.
+
+Por isso existe a opção "Focar no rosto quando aparecer só a cara
+dele", que já vem ligada. Antes de gerar cada clipe, o programa olha três
+instantes daquele trecho e mede se a moldura da webcam está mesmo ali.
+Se não estiver, ele gera aquele clipe em vertical simples em vez de
+split, e escreve o motivo no card do clipe.
+
+Se algum clipe sair errado mesmo assim, é porque o trecho muda de
+layout no meio - nesse caso o card avisa "O layout muda no meio desse
+trecho". Aí o melhor é cortar esse trecho na mão no editor.
+
+QUANTIDADE
+  Quantos cortes gerar. Ele sempre pega os de maior nota.
+
+DURAÇÃO
+  A faixa de tamanho de cada corte. Ele sempre termina no fim de
+  uma frase, nunca no meio de uma palavra.
+
+QUALIDADE DA TRANSCRIÇÃO
+  Rápida       - 2x mais veloz, erra mais palavra
+  Equilibrada  - o padrão, recomendado
+  Melhor       - 3x mais lenta, mais precisa
+
+LEGENDA E GANCHO (na etapa 3, no fim da tela)
+  Gancho na tela  - um texto grande nos primeiros segundos, feito a
+                    partir da própria fala do trecho. Segura quem
+                    assiste sem som. Funciona mesmo com a legenda
+                    desligada.
+  Legenda         - grava a legenda no vídeo, estilo Shorts: a palavra
+                    que está sendo falada fica amarela. Também gera um
+                    arquivo .srt separado, pra legendar no editor.
+
+
+SEUS PROJETOS (botão "Projetos" no topo)
+----------------------------------------
+
+Cada vez que você gera cortes, vira um projeto. O botão "Projetos"
+lista todos, do mais novo pro mais antigo, com as miniaturas, quantos
+cortes tem, a melhor nota e a data. Dá pra procurar pelo nome do vídeo.
+
+Clicando num projeto ele abre do jeito que estava quando terminou:
+os clipes pra assistir e baixar, os títulos pra copiar, a fala de
+cada um e o botão "Relatório". Nada é baixado nem processado de novo.
+
+  Se o vídeo original foi apagado ou mudou de pasta, o projeto
+  continua abrindo, mas só pra assistir e baixar: editar e extrair
+  mais cortes precisam do vídeo original no mesmo lugar.
+
+
+EDITAR UM CLIPE
+---------------
+
+Nem sempre o corte parou no ponto certo, e nem sempre o texto da
+tela é o melhor. Em vez de rodar tudo de novo, cada cartão de clipe
+tem um botão "Editar", que abre o editor:
+
+  O VÍDEO ORIGINAL
+      Em cima fica o vídeo de onde o clipe saiu. "Tocar o corte"
+      toca só o trecho escolhido e para no fim. "Ouvir o começo" e
+      "Ouvir o final" tocam só os 4 segundos da ponta - é onde
+      costuma estar o problema.
+
+  A LINHA DO TEMPO
+      Uma tira de imagens do vídeo, com um pouco antes e um pouco
+      depois do clipe:
+          borda rosa          o corte como vai ficar
+          tracejado branco    como ele está no arquivo agora
+          listrado vermelho   o que vai SAIR do corte
+          verde               o que vai ENTRAR no corte
+
+      Arraste as pontas rosas pra mudar o começo e o fim. Arraste o
+      meio pra mover o corte inteiro. Clique em qualquer lugar pra
+      ver aquele instante. Os botões "30s" mostram mais vídeo antes
+      ou depois, pra esticar mais longe.
+
+      Embaixo aparecem os outros clipes do mesmo projeto, e o editor
+      avisa se o corte começar a repetir um deles.
+
+  O QUE É FALADO
+      A fala do pedaço, palavra por palavra, pintada igual à linha
+      do tempo (riscado em vermelho sai, verde entra). Clique numa
+      palavra pra "Começar o corte aqui" ou "Terminar o corte aqui".
+      Tocando o vídeo, a palavra que está sendo dita fica marcada.
+
+  AJUSTE FINO
+      Os botões -2s, -½s, +½s e +2s mexem no começo e no fim de
+      pouquinho. "Grudar nas palavras" (vem ligado) encaixa a ponta
+      arrastada no começo ou no fim da palavra mais perto, pra não
+      cortar sílaba no meio.
+
+  TEXTO QUE APARECE NA TELA
+      O gancho dos primeiros 4 segundos. Apague e escreva o que
+      quiser; se deixar vazio, o clipe sai sem texto na tela.
+
+  Clique em "Refazer este clipe" e pronto. Leva de 20 a 40 segundos:
+  ele NÃO transcreve nada de novo, só recorta usando o que já tinha
+  ouvido. O clipe novo substitui o antigo, com o mesmo nome de
+  arquivo, e ganha a etiqueta "Editado". A legenda .srt e o
+  RELATORIO.txt são regravados junto. Pode editar quantas vezes quiser.
+
+  Atalhos: barra de espaço toca e pausa, Esc fecha o editor.
+
+  Obs: projeto de versão antiga do programa (sem o arquivo
+  sessao.json na pasta) abre só pra assistir e baixar.
+
+
+EXTRAIR MAIS CORTES
+-------------------
+
+O programa entrega a quantidade que você pediu, mas quase todo vídeo
+tem mais coisa. Abra o projeto e clique em "Extrair mais cortes" (no
+topo do projeto ou no fim da lista de clipes):
+
+  QUANTOS CORTES NOVOS   de 2 a 20
+  DURAÇÃO                curto, médio ou longo (já vem marcada a
+                         mesma da primeira vez)
+
+Ele procura só trechos que AINDA NÃO VIRARAM CORTE - nenhum corte
+novo repete a fala dos que já existem. Os clipes novos:
+  - saem com o mesmo enquadramento, gancho e legenda do projeto
+  - entram na mesma pasta, continuando a numeração (clipe-13,
+    clipe-14...), sem sobrescrever nada
+  - aparecem no fim da lista com a etiqueta "2ª leva" (3ª, 4ª...)
+
+Não transcreve de novo: reaproveita o que está guardado na pasta
+trabalho\. Se você apagou essa pasta, ele avisa antes e ouve o vídeo
+inteiro de novo - aí demora como da primeira vez.
+
+As notas dos cortes novos costumam ser menores, porque os melhores
+momentos já foram na primeira leva. Se sair menos do que você pediu,
+a tela explica por que e diz se cortes mais curtos renderiam mais.
+
+ESCOLHER UM TRECHO DO VÍDEO
+---------------------------
+
+Quando você já sabe onde está o momento bom ("do minuto 1 até o 3"),
+não precisa deixar o programa procurar no vídeo todo. Dá pra assistir
+e marcar o trecho de dois lugares:
+
+  ANTES DE GERAR   na etapa 3, em "De onde tirar os cortes", clique
+                   em "De um trecho que eu escolher"
+  NUM PROJETO      botão "Escolher trecho" no topo do projeto, ou
+                   "Assistir e escolher trecho" no fim da lista
+
+Abre o vídeo com o player (tocar, pausar, volume, tela cheia) e a
+linha do tempo do vídeo inteiro embaixo. Pra marcar, use o que for
+mais fácil:
+
+  - toque o vídeo e clique em "Começar aqui" e "Terminar aqui" no
+    ponto em que ele está
+  - digite o tempo nos campos "Começa" e "Termina" (1:00, 3:00)
+  - arraste as pontas rosas na linha do tempo
+  - clique numa palavra da fala (se o vídeo já foi ouvido antes)
+
+"Aproximar" mostra só o trecho, de perto, pra acertar o segundo.
+"Vídeo inteiro" volta a mostrar tudo.
+
+Depois escolha o que fazer com ele:
+
+  OS MELHORES CORTES AQUI DENTRO
+      O programa procura os momentos bons só nesse pedaço, do mesmo
+      jeito que faz no vídeo todo. Num projeto, os cortes novos não
+      repetem os que já existem.
+
+  UM CORTE SÓ, COM O TRECHO INTEIRO
+      Sai exatamente do começo ao fim que você marcou, sem procurar
+      nada. Ganha nota, título e gancho igual aos outros, e a
+      etiqueta "Trecho escolhido". Pode ter até 10 minutos - o aviso
+      lembra que Shorts e Reels só aceitam até 3.
+
+Na primeira vez, antes de gerar, o programa ainda ouve o vídeo
+inteiro (e guarda). Depois disso, qualquer trecho daquele vídeo
+sai rápido.
+
+
+A NOTA DE ENGAJAMENTO
+---------------------
+
+De 0 a 100. Ela é calculada aqui na sua máquina, olhando coisas
+que fazem um corte segurar o espectador:
+
+  + Gancho na abertura ("o segredo é", "o maior erro", "ninguém
+    te conta", "presta atenção", "se você...")
+  + Promete revelar algo
+  + Tem virada de raciocínio
+  + Traz número ou resultado concreto
+  + Carga emocional
+  + Faz pergunta pro espectador
+  + Conta história pessoal
+  + Entrega algo aplicável
+  + Voz com energia e variação
+  + Ritmo de fala bom
+  + Fecha a ideia por completo
+
+  - Começa no meio do assunto ("então...", "mas aí...")
+  - Muito vício de linguagem ("né", "tipo", "assim")
+  - Repete muito as mesmas palavras
+  - Áudio confuso no trecho
+
+  Acima de 82 = Altíssimo   68 a 81 = Alto
+  54 a 67     = Médio       abaixo de 54 = Baixo
+
+Ela é um bom filtro, não uma bola de cristal. Serve pra você olhar
+primeiro os de nota alta em vez de assistir 30 minutos inteiros.
+
+
+O QUE VAI PRA PASTA saida\
+--------------------------
+
+Cada rodada cria uma pasta com o nome do vídeo e a data:
+
+  clipe-01-titulo-do-corte.mp4   o vídeo pronto pra postar
+  clipe-01-titulo-do-corte.srt   a legenda separada
+  clipe-01-titulo-do-corte.jpg   a miniatura
+  RELATORIO.txt                  tudo em texto, fácil de ler
+  relatorio.json                 os mesmos dados, pra programar em cima
+  sessao.json                    o que o programa precisa pra editar e
+                                 extrair mais cortes depois - não apague
+
+
+SE DER PROBLEMA
+---------------
+
+"Não achei o ffmpeg"
+    Rode o instalar.bat de novo.
+
+"Nao encontrei o Node.js"
+    Rode o instalar.bat: ele instala o Node.js junto. Se acabou de
+    instalar e o erro continua, reinicie o PC (o Windows às vezes só
+    enxerga o Node depois de reiniciar).
+
+"faster-whisper não instalado"
+    Rode o instalar.bat de novo. Ele cria um Python só do programa,
+    na pasta "ambiente", e testa a transcrição no final - assim não
+    importa se o PC já tinha outro Python instalado.
+
+"O faster-whisper está instalado mas não abre neste PC"
+    Falta o Visual C++ do Windows. Instale por este link e abra o
+    programa de novo:  https://aka.ms/vs/17/release/vc_redist.x64.exe
+
+O instalar.bat diz que não achou o winget
+    Abra a Microsoft Store, procure "Instalador de Aplicativo",
+    atualize e rode o instalar.bat de novo.
+
+"Não achei o arquivo" ao arrastar o vídeo
+    O navegador não entrega o caminho completo por segurança.
+    Ele procura em Downloads, Vídeos, Área de Trabalho e Documentos.
+    Se o vídeo estiver em outro lugar, clique na área pra escolher
+    pelo Windows — aí funciona de qualquer pasta.
+
+"Não encontrei fala nenhuma"
+    O vídeo está sem áudio ou só tem música.
+
+Saíram menos cortes do que eu pedi
+    Não é defeito. O programa avisa na tela de resultado por que,
+    com os números do SEU vídeo.
+
+    O limite não é a duração do vídeo: é quanto dele tem FALA.
+    Cada corte precisa começar e terminar numa frase inteira, então
+    trecho de música, luta ou gameplay calado não vira corte.
+
+    Um trailer de cinema de 2:50, por exemplo, costuma ter só uns
+    1:20 de fala, picada em blocos curtos separados por música.
+    Dali não saem 12 cortes de 30s - saem uns 4.
+
+    O que ajuda:
+      - pedir cortes mais curtos (o aviso te diz quantos sairiam)
+      - usar vídeo mais longo, ou com mais gente falando
+
+A janela fechou sozinha
+    Abra o iniciar.bat de novo. A janela preta precisa ficar aberta.
+
+Quer liberar espaço
+    Pode apagar tudo dentro da pasta  trabalho\  — é só cache.
+    (Vai perder o reaproveitamento da transcrição: o próximo
+    "Extrair mais cortes" daquele vídeo ouve tudo de novo.)
+
+
+===========================================================
