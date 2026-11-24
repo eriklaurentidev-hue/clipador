@@ -4,6 +4,7 @@
 (function () {
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
+  var primeiroEmoji = function (t) { var m = String(t || '').match(/(\p{Extended_Pictographic})/u); return m ? m[1] : ''; };
   var semEmoji = function (t) { return String(t || '').replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '').replace(/\s+/g, ' ').trim(); };
 
   // ---------- abas ----------
@@ -36,6 +37,17 @@
     document.body.appendChild(f);
   }
   window.addEventListener('clipador-pronto', popApoio);
+  // Capas e Postagens estão em BETA: selo no título + pedido de apoio pra acelerar as melhorias.
+  [['secCapas', 'Capas em teste: cada apoio acelera rosto recortado com IA, mais estilos e capa animada.'],
+   ['secPosts', 'Postagens em teste: com apoio, a próxima etapa é postar sozinho no TikTok, Reels e Shorts.']].forEach(function (x) {
+    var sec = $(x[0]); if (!sec) return;
+    var h1 = sec.querySelector('h1'); if (h1 && !h1.querySelector('.beta')) { var b = document.createElement('span'); b.className = 'beta'; b.textContent = 'BETA'; h1.appendChild(document.createTextNode(' ')); h1.appendChild(b); }
+    var av = document.createElement('div'); av.className = 'aviso'; av.style.margin = '0 0 16px'; av.style.alignItems = 'center';
+    av.innerHTML = '<span style="font-size:20px">🧪</span><span style="flex:1"></span><button class="btn peq pri" type="button">💜 Apoiar</button>';
+    av.querySelector('span:nth-child(2)').textContent = x[1];
+    av.querySelector('button').addEventListener('click', function () { try { sessionStorage.removeItem('clipador.apoio.visto'); } catch (_) {} popApoio(); });
+    var sub = sec.querySelector('.sub'); if (sub) sub.after(av);
+  });
   window.__popApoio = popApoio; // teste
 
   // ================= CAPAS =================
@@ -47,7 +59,7 @@
     clipes().filter(function (c) { return c.quadro; }).forEach(function (c, k) {
       var im = document.createElement('img'); im.src = c.quadro; im.alt = c.titulo; im.title = c.titulo;
       im.addEventListener('click', async function () { box.querySelectorAll('img').forEach(function (x) { x.classList.toggle('sel', x === im); });
-        C.img = await carregarImagem(c.quadro); C.rosto = c.rosto; if (!$('capaTexto').value) { $('capaTexto').value = semEmoji(c.gancho || c.titulo).toUpperCase(); C.texto = $('capaTexto').value; } desenharCapa(); });
+        C.img = await carregarImagem(c.quadro); C.rosto = c.rosto; C.emoji = primeiroEmoji(c.titulo); if (!$('capaTexto').value) { $('capaTexto').value = semEmoji(c.gancho || c.titulo).toUpperCase(); C.texto = $('capaTexto').value; } desenharCapa(); });
       box.appendChild(im);
       if (k === 0 && !C.img) im.click();
     });
@@ -109,49 +121,106 @@
     ps.forEach(function (p) { var x = at ? at + ' ' + p : p; if (cx.measureText(x).width > max && at) { linhas.push(at); at = p; } else at = x; }); if (at) linhas.push(at);
     return linhas;
   }
-  function desenharCapa() { renderCapa({ img: C.img, rosto: C.rosto, formato: C.formato, estilo: C.estilo, cor: C.cor, texto: C.texto, comRosto: $('capaRosto').checked, comSeta: $('capaSeta').checked, espelho: false }, tela); }
+  function desenharCapa() { renderCapa({ img: C.img, rosto: C.rosto, formato: C.formato, estilo: C.estilo, cor: C.cor, texto: C.texto, emoji: C.emoji, comRosto: $('capaRosto').checked, comSeta: $('capaSeta').checked, espelho: false }, tela); }
+  // Texto de capa: curto e forte. Mais de 5 palavras não se lê numa miniatura.
+  function textoDeCapa(t) {
+    var ws = semEmoji(t || 'O MOMENTO MAIS INSANO').toUpperCase().replace(/[.!?…]+$/, '').split(/\s+/).filter(Boolean);
+    ws = ws.slice(0, 5);
+    // não termina em palavra solta ("O MOMENTO MAIS INSANO DA")
+    while (ws.length > 2 && /^(DA|DE|DO|DAS|DOS|NO|NA|NOS|NAS|O|A|OS|AS|E|EM|QUE|COM|PRA|PARA|UM|UMA|SE|AO)$/.test(ws[ws.length - 1])) ws.pop();
+    return ws.join(' ');
+  }
   function renderCapa(C, tela) {
     var cx = tela.getContext('2d');
     var yt = C.formato === 'yt', W = yt ? 1280 : 1080, H = yt ? 720 : 1920; tela.width = W; tela.height = H;
     cx.fillStyle = '#0a0a0f'; cx.fillRect(0, 0, W, H);
     if (!C.img) { cx.fillStyle = '#6c7286'; cx.font = '600 32px system-ui'; cx.textAlign = 'center'; cx.fillText('Escolha a imagem da capa ←', W / 2, H / 2); return; }
-    var img = C.img, iw = img.naturalWidth, ih = img.naturalHeight;
-    // fundo: a imagem mais viva e com contraste
+    var img = C.img, iw = img.naturalWidth, ih = img.naturalHeight, esp = !!C.espelho;
+    // fundo: imagem mais viva, com contraste
     var f = cobrirImg(img, 0, 0, iw, ih, W, H);
-    cx.filter = C.estilo === 'limpo' ? 'saturate(1.1) contrast(1.05)' : 'saturate(1.35) contrast(1.15) brightness(.9)';
+    cx.filter = C.estilo === 'limpo' ? 'saturate(1.12) contrast(1.06)' : 'saturate(1.4) contrast(1.18) brightness(.92)';
     cx.drawImage(img, f[0], f[1], f[2], f[3], 0, 0, W, H); cx.filter = 'none';
+    // tom da cor de destaque (leve) + vinheta
+    cx.save(); cx.globalCompositeOperation = 'overlay'; cx.globalAlpha = C.estilo === 'limpo' ? 0.08 : 0.16; cx.fillStyle = C.cor; cx.fillRect(0, 0, W, H); cx.restore();
+    var vin = cx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+    vin.addColorStop(0, 'rgba(0,0,0,0)'); vin.addColorStop(1, 'rgba(0,0,0,.55)'); cx.fillStyle = vin; cx.fillRect(0, 0, W, H);
     // escurece o lado do texto pra ele saltar
-    var g = yt ? (C.espelho ? cx.createLinearGradient(W, 0, W * 0.25, 0) : cx.createLinearGradient(0, 0, W * 0.75, 0)) : cx.createLinearGradient(0, H, 0, H * 0.35);
-    g.addColorStop(0, 'rgba(0,0,0,.82)'); g.addColorStop(1, 'rgba(0,0,0,0)'); cx.fillStyle = g; cx.fillRect(0, 0, W, H);
-    if (C.estilo === 'neon') { var gn = cx.createRadialGradient(W * .8, H * .3, 10, W * .8, H * .3, W * .6); gn.addColorStop(0, C.cor + '55'); gn.addColorStop(1, 'transparent'); cx.fillStyle = gn; cx.fillRect(0, 0, W, H); }
-    // rosto do streamer grande, com borda na cor de destaque
-    var esp = !!C.espelho;
+    var g = yt ? (esp ? cx.createLinearGradient(W, 0, W * 0.3, 0) : cx.createLinearGradient(0, 0, W * 0.7, 0)) : cx.createLinearGradient(0, H, 0, H * 0.38);
+    g.addColorStop(0, 'rgba(0,0,0,.85)'); g.addColorStop(1, 'rgba(0,0,0,0)'); cx.fillStyle = g; cx.fillRect(0, 0, W, H);
+    if (C.estilo === 'neon') { var gn = cx.createRadialGradient(W * (esp ? .2 : .8), H * .35, 10, W * (esp ? .2 : .8), H * .35, W * .6); gn.addColorStop(0, C.cor + '66'); gn.addColorStop(1, 'transparent'); cx.fillStyle = gn; cx.fillRect(0, 0, W, H); }
+
+    // rosto grande: recorte FECHADO na pessoa (o centro-alto da webcam), moldura dupla e sombra, invadindo a borda
+    var caixaRosto = null;
     if (C.comRosto && C.rosto && C.rosto.w < 0.9) {
-      var r = C.rosto, rw = yt ? W * 0.42 : W * 0.78, rh = rw * 0.75, rx = yt ? (esp ? 40 : W - rw - 40) : (W - rw) / 2, ry = yt ? H - rh - 40 : 140;
-      var q = cobrirImg(img, r.x * iw, r.y * ih, r.w * iw, r.h * ih, rw, rh);
-      cx.save(); cx.translate(rx + rw / 2, ry + rh / 2); cx.rotate(yt ? 0.03 : -0.02);
-      cx.shadowColor = C.cor; cx.shadowBlur = C.estilo === 'limpo' ? 0 : 40;
-      cx.fillStyle = C.cor; roundRect(cx, -rw / 2 - 10, -rh / 2 - 10, rw + 20, rh + 20, 26); cx.fill(); cx.shadowBlur = 0;
-      cx.save(); roundRect(cx, -rw / 2, -rh / 2, rw, rh, 18); cx.clip(); cx.filter = 'contrast(1.1) saturate(1.15)';
+      var r = C.rosto, fx = focoDoRosto(img, r);
+      var rw = yt ? W * 0.44 : W * 0.8, rh = rw * (yt ? 0.82 : 0.78), rx = yt ? (esp ? 34 : W - rw - 34) : (W - rw) / 2, ry = yt ? H - rh + 22 : 120;
+      var q = cobrirImg(img, fx.x * iw, fx.y * ih, fx.w * iw, fx.h * ih, rw, rh);
+      cx.save(); cx.translate(rx + rw / 2, ry + rh / 2); cx.rotate(yt ? (esp ? -0.035 : 0.035) : -0.02);
+      cx.shadowColor = 'rgba(0,0,0,.7)'; cx.shadowBlur = 50; cx.shadowOffsetY = 18;
+      cx.fillStyle = C.cor; roundRect(cx, -rw / 2 - 14, -rh / 2 - 14, rw + 28, rh + 28, 30); cx.fill();
+      cx.shadowColor = C.estilo === 'limpo' ? 'transparent' : C.cor; cx.shadowBlur = C.estilo === 'neon' ? 60 : 0; cx.shadowOffsetY = 0;
+      cx.fillStyle = '#fff'; roundRect(cx, -rw / 2 - 5, -rh / 2 - 5, rw + 10, rh + 10, 22); cx.fill(); cx.shadowBlur = 0;
+      cx.save(); roundRect(cx, -rw / 2, -rh / 2, rw, rh, 18); cx.clip(); cx.filter = 'contrast(1.12) saturate(1.2) brightness(1.04)';
       cx.drawImage(img, q[0], q[1], q[2], q[3], -rw / 2, -rh / 2, rw, rh); cx.filter = 'none'; cx.restore(); cx.restore();
-      if (C.comSeta) seta(cx, C.cor, yt ? rx + rw * (esp ? 0.82 : 0.18) : W * 0.78, yt ? ry - 70 : ry + rh + 70, yt ? Math.PI * (esp ? 0.58 : 0.42) : -Math.PI / 2);
+      caixaRosto = { x: rx, y: ry, w: rw, h: rh };
+      if (C.comSeta) seta(cx, C.cor, yt ? rx + rw * (esp ? 0.84 : 0.16) : W * 0.8, yt ? ry - 56 : ry + rh + 80, yt ? Math.PI * (esp ? 0.6 : 0.4) : -Math.PI / 2);
     }
-    // texto grande: brancas e a última linha na cor de destaque
-    var texto = semEmoji(C.texto || 'O MOMENTO MAIS INSANO').toUpperCase();
-    var tam = yt ? 104 : 118, max = yt ? W * 0.56 : W - 120, linhas = quebrarTexto(cx, texto, max, tam);
-    while (linhas.length > 3 && tam > 60) { tam -= 8; linhas = quebrarTexto(cx, texto, max, tam); }
+    // figurinha: o emoji do título do clipe, grande, no canto do rosto
+    if (C.emoji) {
+      // no canto de FORA da foto (longe do texto)
+      var ex = caixaRosto ? (yt ? (esp ? caixaRosto.x + 20 : caixaRosto.x + caixaRosto.w - 20) : caixaRosto.x + caixaRosto.w - 50) : (yt ? (esp ? 120 : W - 120) : W - 150);
+      var ey = caixaRosto ? caixaRosto.y + (yt ? 10 : 40) : (yt ? 120 : 260);
+      cx.save(); cx.translate(ex, ey); cx.rotate(esp ? 0.18 : -0.18); cx.font = (yt ? 120 : 150) + 'px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+      cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.shadowColor = 'rgba(0,0,0,.6)'; cx.shadowBlur = 24; cx.fillText(C.emoji, 0, 0); cx.restore();
+    }
+    // texto: curto, o maior que couber em até 3 linhas; última linha em destaque
+    var texto = textoDeCapa(C.texto), max = yt ? (caixaRosto ? W * 0.47 : W * 0.6) : W - 110, tam = yt ? 132 : 150, linhas = quebrarTexto(cx, texto, max, tam);
+    while ((linhas.length > 3 || linhas.some(function (l) { return cx.measureText(l).width > max; })) && tam > 56) { tam -= 6; linhas = quebrarTexto(cx, texto, max, tam); }
     linhas = linhas.slice(0, 3);
     cx.textAlign = yt ? (esp ? 'right' : 'left') : 'center'; cx.textBaseline = 'alphabetic'; cx.lineJoin = 'round';
-    var x0 = yt ? (esp ? W - 56 : 56) : W / 2, alturaBloco = linhas.length * tam * 1.04, y0 = yt ? (H - alturaBloco) / 2 + tam * 0.85 : H * 0.66;
+    var passo = tam * 1.06, x0 = yt ? (esp ? W - 52 : 52) : W / 2, alturaBloco = linhas.length * passo, y0 = yt ? (H - alturaBloco) / 2 + tam * 0.84 - (caixaRosto ? 20 : 0) : H * 0.64;
     linhas.forEach(function (l, i) {
-      var y = y0 + i * tam * 1.04, ultima = i === linhas.length - 1 && linhas.length > 1;
+      var y = y0 + i * passo, ultima = i === linhas.length - 1 && linhas.length > 1;
       cx.font = '900 ' + tam + 'px "Arial Black", system-ui, sans-serif';
-      if (C.estilo === 'neon') { cx.shadowColor = ultima ? C.cor : '#fff'; cx.shadowBlur = 24; }
-      cx.lineWidth = C.estilo === 'limpo' ? 8 : 18; cx.strokeStyle = '#000'; cx.strokeText(l, x0, y);
+      var larg = cx.measureText(l).width;
+      if (ultima && C.estilo === 'impacto') {
+        // tarja tipo marca-texto atrás da última linha, texto escuro por cima
+        var bx = cx.textAlign === 'left' ? x0 - 14 : cx.textAlign === 'right' ? x0 - larg - 14 : x0 - larg / 2 - 14;
+        cx.save(); cx.translate(bx + (larg + 28) / 2, y - tam * 0.36); cx.rotate(esp ? 0.015 : -0.015);
+        cx.fillStyle = C.cor; cx.shadowColor = 'rgba(0,0,0,.55)'; cx.shadowBlur = 18; roundRect(cx, -(larg + 28) / 2, -tam * 0.6, larg + 28, tam * 1.12, 12); cx.fill(); cx.restore();
+        cx.fillStyle = corTexto(C.cor); cx.fillText(l, x0, y);
+        return;
+      }
+      if (C.estilo === 'neon') { cx.shadowColor = ultima ? C.cor : '#fff'; cx.shadowBlur = 26; }
+      cx.lineWidth = C.estilo === 'limpo' ? 9 : Math.round(tam * 0.17); cx.strokeStyle = '#000'; cx.strokeText(l, x0, y);
       cx.fillStyle = ultima ? C.cor : '#fff'; cx.fillText(l, x0, y); cx.shadowBlur = 0;
     });
-    if (C.comSeta && C.estilo !== 'limpo') { cx.fillStyle = C.cor; cx.fillRect(yt ? (esp ? W - 296 : 56) : W / 2 - 120, (yt ? y0 + (linhas.length - 1) * tam * 1.04 : y0 + (linhas.length - 1) * tam * 1.04) + 26, 240, 12); }
   }
+  // Onde está o ROSTO dentro da webcam: procura os tons de pele e centraliza ali com
+  // aproximação. A webcam costuma ter cadeira, parede e luz em volta: sem isso a capa
+  // mostrava mais cenário que pessoa. Sem pele suficiente, usa a webcam inteira.
+  var focos = new WeakMap();
+  function focoDoRosto(img, r) {
+    var chave = r.x + ',' + r.y + ',' + r.w + ',' + r.h, cache = focos.get(img) || {}; if (cache[chave]) return cache[chave];
+    var iw = img.naturalWidth, ih = img.naturalHeight, L = 120, A = Math.max(20, Math.round(L * (r.h * ih) / (r.w * iw)));
+    var cv = document.createElement('canvas'); cv.width = L; cv.height = A; var k = cv.getContext('2d', { willReadFrequently: true });
+    k.drawImage(img, r.x * iw, r.y * ih, r.w * iw, r.h * ih, 0, 0, L, A);
+    var px = k.getImageData(0, 0, L, A).data, sx = 0, sy = 0, n = 0;
+    for (var y = 0; y < A; y++) for (var x = 0; x < L; x++) {
+      var i = (y * L + x) * 4, R = px[i], G = px[i + 1], B = px[i + 2];
+      var Y = 0.299 * R + 0.587 * G + 0.114 * B, Cb = 128 - 0.168736 * R - 0.331264 * G + 0.5 * B, Cr = 128 + 0.5 * R - 0.418688 * G - 0.081312 * B;
+      if (Y > 55 && Cr > 136 && Cr < 175 && Cb > 80 && Cb < 128 && R > G && R > B) { var peso = y < A * 0.75 ? 1.5 : 0.6; sx += x * peso; sy += y * peso; n += peso; }
+    }
+    var foco = { x: r.x, y: r.y, w: r.w, h: r.h };
+    if (n > L * A * 0.025) {
+      var cxr = sx / n / L, cyr = sy / n / A, fw = 0.62, fh = 0.78;
+      var nx = Math.max(0, Math.min(1 - fw, cxr - fw / 2)), ny = Math.max(0, Math.min(1 - fh, cyr - fh * 0.42));
+      foco = { x: r.x + nx * r.w, y: r.y + ny * r.h, w: r.w * fw, h: r.h * fh };
+    }
+    cache[chave] = foco; focos.set(img, cache); return foco;
+  }
+  // texto preto ou branco, o que ler melhor em cima da cor de destaque
+  function corTexto(hex) { var v = parseInt(String(hex).slice(1), 16), r = v >> 16 & 255, g2 = v >> 8 & 255, b = v & 255; return (r * 0.299 + g2 * 0.587 + b * 0.114) > 150 ? '#0b0b0f' : '#ffffff'; }
   function roundRect(cx, x, y, w, h, r) { cx.beginPath(); cx.moveTo(x + r, y); cx.arcTo(x + w, y, x + w, y + h, r); cx.arcTo(x + w, y + h, x, y + h, r); cx.arcTo(x, y + h, x, y, r); cx.arcTo(x, y, x + w, y, r); cx.closePath(); }
   function seta(cx, cor, x, y, ang) {
     cx.save(); cx.translate(x, y); cx.rotate(ang); cx.fillStyle = cor; cx.strokeStyle = '#000'; cx.lineWidth = 8; cx.lineJoin = 'round';
@@ -163,7 +232,7 @@
     var b = this; b.disabled = true; b.textContent = 'Gerando 10 capas…';
     var fontes = [];
     var cs = clipes().filter(function (c) { return c.quadro; });
-    for (var i = 0; i < cs.length; i++) fontes.push({ img: await carregarImagem(cs[i].quadro), rosto: cs[i].rosto, textos: [semEmoji(cs[i].gancho), semEmoji(cs[i].titulo)].filter(Boolean) });
+    for (var i = 0; i < cs.length; i++) fontes.push({ img: await carregarImagem(cs[i].quadro), rosto: cs[i].rosto, emoji: primeiroEmoji(cs[i].titulo), textos: [semEmoji(cs[i].gancho), semEmoji(cs[i].titulo)].filter(Boolean) });
     if (!fontes.length && C.img) fontes.push({ img: C.img, rosto: C.rosto, textos: [] });
     if (!fontes.length) { alert('Escolha uma imagem (ou gere clipes) primeiro.'); b.disabled = false; b.textContent = '✨ Gerar 10 capas diferentes'; return; }
     var cores = (C.paleta.length ? C.paleta : []).concat([C.cor, '#ffe14d', '#22d3ee', '#ff3b5c', '#a3ff3d']).filter(function (x, k, a) { return a.indexOf(x) === k; });
@@ -172,7 +241,7 @@
     for (var n = 0; n < 10; n++) {
       var fo = fontes[n % fontes.length], txts = [textoBase].concat(fo.textos.map(function (t) { return t.toUpperCase(); })).filter(Boolean);
       loteCfgs.push({ img: fo.img, rosto: fo.rosto, formato: C.formato, estilo: estilos[n % estilos.length], cor: cores[n % cores.length],
-        texto: txts.length ? txts[n % txts.length] : 'O MOMENTO MAIS INSANO', comRosto: !!fo.rosto, comSeta: n % 3 !== 2, espelho: n % 2 === 1 });
+        texto: txts.length ? txts[n % txts.length] : 'O MOMENTO MAIS INSANO', emoji: n % 4 === 3 ? '' : fo.emoji, comRosto: !!fo.rosto, comSeta: n % 3 !== 2, espelho: n % 2 === 1 });
     }
     var box = $('lote'); box.innerHTML = ''; $('loteBox').hidden = false;
     loteCfgs.forEach(function (cfg, k) {
@@ -188,11 +257,14 @@
     });
     b.disabled = false; b.textContent = '✨ Gerar 10 capas diferentes';
   });
-  function baixarCanvas(cv, nome) { cv.toBlob(function (bl) { var a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = nome + '.png'; a.click(); }, 'image/png'); }
+  // JPG de até 2 MB: é o limite de capa do YouTube (PNG grande era recusado lá).
+  function baixarCanvas(cv, nome) {
+    (function tenta(q) { cv.toBlob(function (bl) { if (bl.size > 2 * 1048576 && q > 0.6) return tenta(q - 0.08);
+      var a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = nome + '.jpg'; a.click(); }, 'image/jpeg', q); })(0.94);
+  }
   $('loteBaixar').addEventListener('click', function () { var cvs = $('lote').querySelectorAll('canvas'); cvs.forEach(function (cv, k) { setTimeout(function () { baixarCanvas(cv, 'capa-' + (k + 1)); }, k * 350); }); });
   $('capaBaixar').addEventListener('click', function () {
-    if (!C.img) return; var a = document.createElement('a'); a.download = 'capa-clipador-' + (C.formato === 'yt' ? 'youtube' : 'vertical') + '.png';
-    tela.toBlob(function (b) { a.href = URL.createObjectURL(b); a.click(); }, 'image/png');
+    if (!C.img) return; baixarCanvas(tela, 'capa-clipador-' + (C.formato === 'yt' ? 'youtube' : 'vertical'));
   });
 
   // ================= POSTAGENS =================
