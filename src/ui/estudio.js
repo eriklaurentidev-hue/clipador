@@ -37,6 +37,99 @@
     document.body.appendChild(f);
   }
   window.addEventListener('clipador-pronto', popApoio);
+  // Opção "Recortar a pessoa com IA" (depois do "Rosto do streamer em destaque")
+  (function () {
+    var alvo = $('capaRosto'); if (!alvo || $('capaRecorte')) return;
+    var l = document.createElement('label'); l.className = 'marca-op';
+    l.innerHTML = '<input type="checkbox" id="capaRecorte" checked><span><b>Recortar a pessoa com IA</b><small>Tira o streamer da moldura da webcam, com contorno e brilho. Na 1ª vez baixa ~9 MB.</small></span>';
+    alvo.closest('label').after(l);
+    l.querySelector('input').addEventListener('change', function () { desenharCapa(); });
+  })();
+  // ================= IA DO GEMINI (opcional, chave da própria pessoa) =================
+  // A chave fica SÓ neste aparelho (localStorage) e vai direto do navegador pro Google: nunca passa pelo servidor do Clipador.
+  var CHAVE_GEMINI = 'clipador.gemini.chave';
+  var lerChave = function () { try { return localStorage.getItem(CHAVE_GEMINI) || ''; } catch (_) { return ''; } };
+  var MODELOS_IMAGEM = ['gemini-2.5-flash-image', 'gemini-3.1-flash-image-preview', 'gemini-2.5-flash-image-preview'];
+  (function () {
+    var depois = $('capaLote'); if (!depois || $('blocoGemini')) return;
+    var b = document.createElement('div'); b.id = 'blocoGemini'; b.className = 'card'; b.style.marginTop = '12px'; b.style.padding = '14px';
+    b.innerHTML = '<span class="rot" style="margin-top:0">🤖 IA do Gemini <span class="beta">OPCIONAL</span></span>' +
+      '<div id="gemSem"><p class="dica" style="margin:0 0 8px">Com a sua chave do Gemini (grátis em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com</a>), a IA desenha uma capa nova a partir do seu clipe.</p>' +
+      '<div class="linha" style="gap:6px"><input type="password" id="gemChave" placeholder="Cole a chave aqui" autocomplete="off" style="flex:1;min-width:0"><button class="btn peq" id="gemSalvar" type="button">Salvar</button></div>' +
+      '<p class="dica" style="margin:6px 0 0">🔒 Fica só neste aparelho e vai direto pro Google. Dá pra remover quando quiser.</p></div>' +
+      '<div id="gemCom" hidden><p class="dica" style="margin:0 0 8px">✓ Chave salva neste aparelho.</p>' +
+      '<button class="btn pri" id="gemGerar" type="button" style="width:100%">✨ Gerar capa com IA</button>' +
+      '<button class="btn peq" id="gemRemover" type="button" style="width:100%;margin-top:8px">Remover chave deste aparelho</button></div>' +
+      '<div class="aviso" id="gemAviso" hidden></div>';
+    depois.after(b);
+    function pintar() { var tem = !!lerChave(); $('gemSem').hidden = tem; $('gemCom').hidden = !tem; }
+    pintar();
+    $('gemSalvar').addEventListener('click', function () { var k = $('gemChave').value.trim(); if (!/^[A-Za-z0-9_-]{20,}$/.test(k)) { mostrarGem('Essa chave não parece certa. Copie de novo no Google AI Studio.', true); return; }
+      try { localStorage.setItem(CHAVE_GEMINI, k); } catch (_) {} $('gemChave').value = ''; mostrarGem(''); pintar(); });
+    $('gemRemover').addEventListener('click', function () { try { localStorage.removeItem(CHAVE_GEMINI); } catch (_) {} mostrarGem('Chave removida deste aparelho.'); pintar(); });
+    $('gemGerar').addEventListener('click', gerarComGemini);
+  })();
+  function mostrarGem(msg, erro) { var a = $('gemAviso'); if (!a) return; a.hidden = !msg; a.className = 'aviso' + (erro ? ' erro' : ''); a.textContent = msg || ''; }
+  // imagem → base64 (JPEG) pra mandar pro Gemini
+  function imagemBase64(fonte, maxLado) {
+    var w = fonte.naturalWidth || fonte.width, h = fonte.naturalHeight || fonte.height, e = Math.min(1, (maxLado || 1280) / Math.max(w, h));
+    var c = document.createElement('canvas'); c.width = Math.round(w * e); c.height = Math.round(h * e); c.getContext('2d').drawImage(fonte, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.9).split(',')[1];
+  }
+  async function gerarComGemini() {
+    var chave = lerChave(); if (!chave) return;
+    if (!C.img) { mostrarGem('Escolha a imagem da capa primeiro (um clipe ou uma imagem sua).', true); return; }
+    var b = $('gemGerar'); b.disabled = true; b.textContent = 'A IA está desenhando… (até 1 min)'; mostrarGem('');
+    var yt = C.formato === 'yt', texto = textoDeCapa(C.texto, 5) || 'O MOMENTO MAIS INSANO';
+    var pedido = 'Crie uma capa (thumbnail) ' + (yt ? 'de YouTube, formato 16:9 horizontal' : 'vertical 9:16 pra Shorts/TikTok') + ' para um corte de live de jogo.\n' +
+      '- Use a IMAGEM 1 (um momento do vídeo) como conteúdo principal. Se houver um streamer/webcam nela, destaque a pessoa: grande, recortada, com contorno branco e luz de contorno na cor ' + C.cor + ', mantendo o rosto reconhecível e sem mudar a identidade dela.\n' +
+      '- Texto grande em português, exatamente: "' + texto + '". Letras grossas, alto contraste, legível no celular. Não escreva nenhum outro texto.\n' +
+      '- Cores fortes e saturadas, um assunto claro, fundo do próprio jogo com profundidade.\n' +
+      (C.refImg ? '- A IMAGEM 2 é só referência de CORES e de composição: NÃO copie texto, logotipo, marca nem pessoas dela.\n' : '') +
+      '- Sem logotipos, sem marca d\'água. Deixe o canto inferior direito livre (ali fica a duração do vídeo).';
+    var partes = [{ text: pedido }, { inline_data: { mime_type: 'image/jpeg', data: imagemBase64(C.img, 1280) } }];
+    if (C.refImg) partes.push({ inline_data: { mime_type: 'image/jpeg', data: imagemBase64(C.refImg, 768) } });
+    var ultimoErro = '';
+    for (var i = 0; i < MODELOS_IMAGEM.length; i++) {
+      for (var comFormato = 1; comFormato >= 0; comFormato--) {
+        var corpo = { contents: [{ parts: partes }], generationConfig: { responseModalities: ['TEXT', 'IMAGE'] } };
+        if (comFormato) corpo.generationConfig.imageConfig = { aspectRatio: yt ? '16:9' : '9:16' };
+        try {
+          var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + MODELOS_IMAGEM[i] + ':generateContent', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': chave }, body: JSON.stringify(corpo), referrerPolicy: 'no-referrer' });
+          var j = await r.json().catch(function () { return {}; });
+          if (!r.ok) {
+            ultimoErro = (j.error && j.error.message) || ('erro ' + r.status);
+            if (r.status === 400 && comFormato) continue;            // formato não aceito: tenta sem
+            if (r.status === 401 || r.status === 403) { i = MODELOS_IMAGEM.length; break; } // chave inválida: para
+            break;                                                    // modelo indisponível: próximo
+          }
+          var parts = (j.candidates && j.candidates[0] && j.candidates[0].content && j.candidates[0].content.parts) || [];
+          var im = parts.find(function (p) { return p.inlineData || p.inline_data; });
+          if (!im) { ultimoErro = 'A IA respondeu sem imagem (pode ter recusado o pedido).'; break; }
+          var dado = im.inlineData || im.inline_data, url = 'data:' + (dado.mimeType || dado.mime_type || 'image/png') + ';base64,' + dado.data;
+          mostrarResultadoIA(await carregarImagem(url), yt);
+          b.disabled = false; b.textContent = '✨ Gerar capa com IA'; mostrarGem('Pronto! A capa da IA está na lista "opções" (pode gerar de novo pra ter outra).');
+          return;
+        } catch (e) { ultimoErro = e.message || String(e); break; }
+      }
+    }
+    b.disabled = false; b.textContent = '✨ Gerar capa com IA';
+    mostrarGem('Não deu pra gerar com a IA: ' + ultimoErro + (/quota|exhausted|429/i.test(ultimoErro) ? ' (limite grátis da sua chave: tente mais tarde)' : ''), true);
+  }
+  // a capa da IA entra no topo da lista de opções, no tamanho certo (1280x720 ou 1080x1920) e pronta pra baixar em JPG
+  function mostrarResultadoIA(img, yt) {
+    var cv = document.createElement('canvas'), W = yt ? 1280 : 1080, H = yt ? 720 : 1920; cv.width = W; cv.height = H;
+    var q = cobrirImg(img, 0, 0, img.naturalWidth, img.naturalHeight, W, H); cv.getContext('2d').drawImage(img, q[0], q[1], q[2], q[3], 0, 0, W, H);
+    $('loteBox').hidden = false;
+    var fig = document.createElement('figure'); if (!yt) fig.className = 'vert';
+    var cap = document.createElement('figcaption'); cap.innerHTML = '<span>🤖 IA do Gemini</span>';
+    var bt = document.createElement('button'); bt.className = 'btn peq'; bt.type = 'button'; bt.textContent = '⬇'; bt.title = 'Baixar';
+    bt.addEventListener('click', function () { baixarCanvas(cv, 'capa-ia-gemini'); }); cap.appendChild(bt);
+    fig.appendChild(cv); fig.appendChild(cap); $('lote').prepend(fig);
+    fig.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
   // Capas e Postagens estão em BETA: selo no título + pedido de apoio pra acelerar as melhorias.
   [['secCapas', 'Capas em teste: cada apoio acelera rosto recortado com IA, mais estilos e capa animada.'],
    ['secPosts', 'Postagens em teste: com apoio, a próxima etapa é postar sozinho no TikTok, Reels e Shorts.']].forEach(function (x) {
@@ -87,6 +180,7 @@
     b.disabled = false; b.textContent = 'Puxar capa';
   });
   function usarReferencia(im) {
+    C.refImg = im;
     var c2 = document.createElement('canvas'); c2.width = 96; c2.height = 54; var k = c2.getContext('2d', { willReadFrequently: true }); k.drawImage(im, 0, 0, 96, 54);
     var px = k.getImageData(0, 0, 96, 54).data, caixas = {};
     for (var i = 0; i < px.length; i += 4) {
@@ -121,13 +215,25 @@
     ps.forEach(function (p) { var x = at ? at + ' ' + p : p; if (cx.measureText(x).width > max && at) { linhas.push(at); at = p; } else at = x; }); if (at) linhas.push(at);
     return linhas;
   }
-  function desenharCapa() { renderCapa({ img: C.img, rosto: C.rosto, formato: C.formato, estilo: C.estilo, cor: C.cor, texto: C.texto, emoji: C.emoji, comRosto: $('capaRosto').checked, comSeta: $('capaSeta').checked, espelho: false }, tela); }
+  var geracaoCapa = 0;
+  function desenharCapa() {
+    var cfg = { img: C.img, rosto: C.rosto, formato: C.formato, estilo: C.estilo, cor: C.cor, texto: C.texto, emoji: C.emoji, comRosto: $('capaRosto').checked, comSeta: $('capaSeta').checked, espelho: false };
+    renderCapa(cfg, tela);
+    // recorta a pessoa com IA e redesenha (a 1ª vez baixa ~9 MB e fica guardado)
+    if (cfg.comRosto && cfg.img && cfg.rosto && $('capaRecorte') && $('capaRecorte').checked) {
+      var g = ++geracaoCapa;
+      recortePessoa(cfg.img, cfg.rosto).then(function (rc) { if (rc && g === geracaoCapa) { cfg.recorte = rc; renderCapa(cfg, tela); } });
+    }
+  }
   // Texto de capa: curto e forte. Mais de 5 palavras não se lê numa miniatura.
-  function textoDeCapa(t) {
+  function textoDeCapa(t, maxPalavras) {
     var ws = semEmoji(t || 'O MOMENTO MAIS INSANO').toUpperCase().replace(/[.!?…]+$/, '').split(/\s+/).filter(Boolean);
-    ws = ws.slice(0, 5);
+    ws = ws.slice(0, maxPalavras || 5);
     // não termina em palavra solta ("O MOMENTO MAIS INSANO DA")
-    while (ws.length > 2 && /^(DA|DE|DO|DAS|DOS|NO|NA|NOS|NAS|O|A|OS|AS|E|EM|QUE|COM|PRA|PARA|UM|UMA|SE|AO)$/.test(ws[ws.length - 1])) ws.pop();
+    var solta = /^(DA|DE|DO|DAS|DOS|NO|NA|NOS|NAS|O|A|OS|AS|E|EM|QUE|COM|PRA|PARA|UM|UMA|SE|AO)$/;
+    while (ws.length > 1 && solta.test(ws[ws.length - 1])) ws.pop();
+    // curto demais pra ter sentido ("OLHA O"): usa a frase completa (até 5 palavras)
+    if (maxPalavras && maxPalavras < 5 && ws.filter(function (w) { return !solta.test(w); }).length < 2) return textoDeCapa(t, 5);
     return ws.join(' ');
   }
   function renderCapa(C, tela) {
@@ -151,7 +257,18 @@
 
     // rosto grande: recorte FECHADO na pessoa (o centro-alto da webcam), moldura dupla e sombra, invadindo a borda
     var caixaRosto = null;
-    if (C.comRosto && C.rosto && C.rosto.w < 0.9) {
+    if (C.comRosto && C.recorte) {
+      // pessoa recortada: grande, em pé, invadindo a borda de baixo, com contorno branco e brilho na cor de destaque
+      var rc = C.recorte, alt = yt ? H * 0.98 : H * 0.5, larg = alt * rc.width / rc.height;
+      if (larg > (yt ? W * 0.55 : W * 0.95)) { larg = yt ? W * 0.55 : W * 0.95; alt = larg * rc.height / rc.width; }
+      var px0 = yt ? (esp ? 10 : W - larg - 10) : (W - larg) / 2, py0 = yt ? H - alt + 8 : 110;
+      var branco = silhueta(rc, '#ffffff'), brilho = silhueta(rc, C.cor), esp2 = Math.max(5, Math.round(alt * 0.012));
+      cx.save(); cx.shadowColor = C.cor; cx.shadowBlur = C.estilo === 'limpo' ? 0 : 70; cx.drawImage(brilho, px0, py0, larg, alt); cx.restore();
+      for (var a = 0; a < 16; a++) { var an = a / 16 * Math.PI * 2; cx.drawImage(branco, px0 + Math.cos(an) * esp2, py0 + Math.sin(an) * esp2, larg, alt); }
+      cx.filter = 'contrast(1.12) saturate(1.2) brightness(1.05)'; cx.drawImage(rc, px0, py0, larg, alt); cx.filter = 'none';
+      caixaRosto = { x: px0 + larg * 0.1, y: py0 + alt * 0.08, w: larg * 0.8, h: alt * 0.6 };
+      if (C.comSeta) seta(cx, C.cor, yt ? (esp ? px0 + larg + 30 : px0 - 30) : W * 0.82, yt ? py0 + alt * 0.3 : py0 + alt + 60, yt ? (esp ? Math.PI : 0) : -Math.PI / 2);
+    } else if (C.comRosto && C.rosto && C.rosto.w < 0.9) {
       var r = C.rosto, fx = focoDoRosto(img, r);
       var rw = yt ? W * 0.44 : W * 0.8, rh = rw * (yt ? 0.82 : 0.78), rx = yt ? (esp ? 34 : W - rw - 34) : (W - rw) / 2, ry = yt ? H - rh + 22 : 120;
       var q = cobrirImg(img, fx.x * iw, fx.y * ih, fx.w * iw, fx.h * ih, rw, rh);
@@ -174,7 +291,8 @@
       cx.textAlign = 'center'; cx.textBaseline = 'middle'; cx.shadowColor = 'rgba(0,0,0,.6)'; cx.shadowBlur = 24; cx.fillText(C.emoji, 0, 0); cx.restore();
     }
     // texto: curto, o maior que couber em até 3 linhas; última linha em destaque
-    var texto = textoDeCapa(C.texto), max = yt ? (caixaRosto ? W * 0.47 : W * 0.6) : W - 110, tam = yt ? 132 : 150, linhas = quebrarTexto(cx, texto, max, tam);
+    if (C.semTexto) return;
+    var texto = textoDeCapa(C.texto, C.palavras), max = yt ? (caixaRosto ? W * 0.47 : W * 0.6) : W - 110, tam = yt ? 132 : 150, linhas = quebrarTexto(cx, texto, max, tam);
     while ((linhas.length > 3 || linhas.some(function (l) { return cx.measureText(l).width > max; })) && tam > 56) { tam -= 6; linhas = quebrarTexto(cx, texto, max, tam); }
     linhas = linhas.slice(0, 3);
     cx.textAlign = yt ? (esp ? 'right' : 'left') : 'center'; cx.textBaseline = 'alphabetic'; cx.lineJoin = 'round';
@@ -196,6 +314,56 @@
       cx.fillStyle = ultima ? C.cor : '#fff'; cx.fillText(l, x0, y); cx.shadowBlur = 0;
     });
   }
+  // ---------- Pessoa recortada com IA (MediaPipe "selfie segmenter", 250 KB, roda no navegador) ----------
+  var segmentador = null, segmentadorFalhou = false;
+  async function obterSegmentador() {
+    if (segmentador || segmentadorFalhou) return segmentador;
+    try {
+      var base = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14';
+      var mp = await import(base + '/vision_bundle.mjs');
+      var arquivos = await mp.FilesetResolver.forVisionTasks(base + '/wasm');
+      segmentador = await mp.ImageSegmenter.createFromOptions(arquivos, {
+        baseOptions: { modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite', delegate: 'CPU' },
+        runningMode: 'IMAGE', outputConfidenceMasks: true, outputCategoryMask: false,
+      });
+    } catch (e) { segmentadorFalhou = true; segmentador = null; }
+    return segmentador;
+  }
+  // Recorta a pessoa da área da webcam: devolve um canvas com fundo transparente (ou null).
+  var recortes = new WeakMap();
+  async function recortePessoa(img, r) {
+    if (!img || !r || r.w >= 0.9) return null;
+    var chave = r.x + ',' + r.y + ',' + r.w + ',' + r.h, cache = recortes.get(img) || {};
+    if (chave in cache) return cache[chave];
+    var seg = await obterSegmentador(); if (!seg) { cache[chave] = null; recortes.set(img, cache); return null; }
+    var iw = img.naturalWidth, ih = img.naturalHeight, sw = r.w * iw, sh = r.h * ih, L = Math.min(768, Math.round(sw * 2)), A = Math.round(L * sh / sw);
+    var cv = document.createElement('canvas'); cv.width = L; cv.height = A; var k = cv.getContext('2d', { willReadFrequently: true });
+    k.imageSmoothingQuality = 'high'; k.drawImage(img, r.x * iw, r.y * ih, sw, sh, 0, 0, L, A);
+    var res = null;
+    try { res = seg.segment(cv); } catch (_) { cache[chave] = null; recortes.set(img, cache); return null; }
+    var m = res.confidenceMasks && res.confidenceMasks[0], dados = m ? m.getAsFloat32Array() : null, mw = m ? m.width : 0, mh = m ? m.height : 0;
+    var px = k.getImageData(0, 0, L, A), d = px.data, pessoa = 0, x0 = L, y0 = A, x1 = 0, y1 = 0;
+    for (var y = 0; y < A; y++) for (var x = 0; x < L; x++) {
+      var mx = Math.min(mw - 1, Math.floor(x * mw / L)), my = Math.min(mh - 1, Math.floor(y * mh / A)), c = dados ? dados[my * mw + mx] : 0;
+      var a = Math.max(0, Math.min(1, (c - 0.35) / 0.3)); d[(y * L + x) * 4 + 3] = Math.round(a * 255);
+      if (a > 0.5) { pessoa++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    try { res.close(); } catch (_) {}
+    // pouca pessoa (webcam sem gente, só cenário): não vale recortar
+    if (pessoa < L * A * 0.08) { cache[chave] = null; recortes.set(img, cache); return null; }
+    k.putImageData(px, 0, 0);
+    // só o retângulo da pessoa (com folga): assim ela ocupa a capa toda, não a webcam inteira
+    var folga = Math.round(L * 0.03); x0 = Math.max(0, x0 - folga); y0 = Math.max(0, y0 - folga); x1 = Math.min(L - 1, x1 + folga); y1 = A - 1;
+    var out = document.createElement('canvas'); out.width = x1 - x0 + 1; out.height = y1 - y0 + 1;
+    out.getContext('2d').drawImage(cv, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
+    cache[chave] = out; recortes.set(img, cache); return out;
+  }
+  // Silhueta da pessoa numa cor (pro contorno e pro brilho)
+  function silhueta(recorte, cor) {
+    var c = document.createElement('canvas'); c.width = recorte.width; c.height = recorte.height; var k = c.getContext('2d');
+    k.drawImage(recorte, 0, 0); k.globalCompositeOperation = 'source-in'; k.fillStyle = cor; k.fillRect(0, 0, c.width, c.height); return c;
+  }
+
   // Onde está o ROSTO dentro da webcam: procura os tons de pele e centraliza ali com
   // aproximação. A webcam costuma ter cadeira, parede e luz em volta: sem isso a capa
   // mostrava mais cenário que pessoa. Sem pele suficiente, usa a webcam inteira.
@@ -233,6 +401,8 @@
     var fontes = [];
     var cs = clipes().filter(function (c) { return c.quadro; });
     for (var i = 0; i < cs.length; i++) fontes.push({ img: await carregarImagem(cs[i].quadro), rosto: cs[i].rosto, emoji: primeiroEmoji(cs[i].titulo), textos: [semEmoji(cs[i].gancho), semEmoji(cs[i].titulo)].filter(Boolean) });
+    var querRecorte = $('capaRecorte') && $('capaRecorte').checked;
+    if (querRecorte) { b.textContent = 'Recortando a pessoa com IA…'; for (var f2 = 0; f2 < fontes.length; f2++) fontes[f2].recorte = await recortePessoa(fontes[f2].img, fontes[f2].rosto); b.textContent = 'Gerando 10 capas…'; }
     if (!fontes.length && C.img) fontes.push({ img: C.img, rosto: C.rosto, textos: [] });
     if (!fontes.length) { alert('Escolha uma imagem (ou gere clipes) primeiro.'); b.disabled = false; b.textContent = '✨ Gerar 10 capas diferentes'; return; }
     var cores = (C.paleta.length ? C.paleta : []).concat([C.cor, '#ffe14d', '#22d3ee', '#ff3b5c', '#a3ff3d']).filter(function (x, k, a) { return a.indexOf(x) === k; });
@@ -241,7 +411,9 @@
     for (var n = 0; n < 10; n++) {
       var fo = fontes[n % fontes.length], txts = [textoBase].concat(fo.textos.map(function (t) { return t.toUpperCase(); })).filter(Boolean);
       loteCfgs.push({ img: fo.img, rosto: fo.rosto, formato: C.formato, estilo: estilos[n % estilos.length], cor: cores[n % cores.length],
-        texto: txts.length ? txts[n % txts.length] : 'O MOMENTO MAIS INSANO', emoji: n % 4 === 3 ? '' : fo.emoji, comRosto: !!fo.rosto, comSeta: n % 3 !== 2, espelho: n % 2 === 1 });
+        texto: txts.length ? txts[n % txts.length] : 'O MOMENTO MAIS INSANO', emoji: n % 4 === 3 ? '' : fo.emoji, comRosto: !!fo.rosto, comSeta: n % 3 !== 2, espelho: n % 2 === 1,
+        // metade com a pessoa recortada, metade na moldura; algumas com só 3 palavras e uma só com o rosto
+        recorte: fo.recorte && n % 2 === 0 ? fo.recorte : null, palavras: n % 3 === 1 ? 3 : 5, semTexto: n === 8 && !!fo.recorte });
     }
     var box = $('lote'); box.innerHTML = ''; $('loteBox').hidden = false;
     loteCfgs.forEach(function (cfg, k) {
@@ -251,7 +423,7 @@
       var bt = document.createElement('button'); bt.className = 'btn peq'; bt.type = 'button'; bt.textContent = '⬇'; bt.title = 'Baixar';
       bt.addEventListener('click', function () { baixarCanvas(cv, 'capa-' + (k + 1)); });
       var ed = document.createElement('button'); ed.className = 'btn peq'; ed.type = 'button'; ed.textContent = '✎'; ed.title = 'Editar esta';
-      ed.addEventListener('click', function () { C.img = cfg.img; C.rosto = cfg.rosto; C.estilo = cfg.estilo; C.cor = cfg.cor; C.texto = cfg.texto; $('capaTexto').value = cfg.texto; $('capaCor').value = cfg.cor; desenharCapa(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+      ed.addEventListener('click', function () { C.img = cfg.img; C.rosto = cfg.rosto; if ($('capaRecorte')) $('capaRecorte').checked = !!cfg.recorte; C.estilo = cfg.estilo; C.cor = cfg.cor; C.texto = cfg.texto; $('capaTexto').value = cfg.texto; $('capaCor').value = cfg.cor; desenharCapa(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
       var gr = document.createElement('span'); gr.style.display = 'flex'; gr.style.gap = '4px'; gr.appendChild(ed); gr.appendChild(bt); cap.appendChild(gr);
       fig.appendChild(cv); fig.appendChild(cap); box.appendChild(fig);
     });

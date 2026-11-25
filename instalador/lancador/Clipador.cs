@@ -25,8 +25,8 @@ using Microsoft.Win32;
 [assembly: System.Reflection.AssemblyDescription("Clipador")]
 [assembly: System.Reflection.AssemblyCompany("Clipador")]
 [assembly: System.Reflection.AssemblyCopyright("© 2026 Clipador")]
-[assembly: System.Reflection.AssemblyVersion("1.0.3.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.0.3.0")]
+[assembly: System.Reflection.AssemblyVersion("1.0.4.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.0.4.0")]
 
 static class Programa
 {
