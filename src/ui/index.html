@@ -1197,6 +1197,27 @@
           <span>Com a legenda ligada, deixa de fora a faixa de baixo do jogo, onde aparecem as falas das cenas. Assim não ficam duas legendas ao mesmo tempo.</span>
         </div>
       </label>
+      <label class="marcar">
+        <input type="checkbox" id="modoJogo">
+        <div>
+          <b>Modo vídeo de jogo (GTA 6 e outros) <span style="font-size:.7rem;padding:2px 7px;border-radius:99px;background:#c4ff3d;color:#0a0c0a;font-weight:800">BETA</span></b>
+          <span>Um clique: rosto em cima, legenda amarela no meio, sem a legenda do jogo e sem tarja preta, tira a música. No fim também monta o vídeo longo 16:9 pro YouTube com capítulos. Os cortes 9:16 servem pro TikTok e pro Shorts.</span>
+        </div>
+      </label>
+      <label class="marcar">
+        <input type="checkbox" id="paralelo2">
+        <div>
+          <b>Gerar 2 clipes ao mesmo tempo</b>
+          <span>Mais rápido em PC forte (6 núcleos ou mais, 16 GB). Em PC fraco deixe desligado.</span>
+        </div>
+      </label>
+      <label class="marcar">
+        <input type="checkbox" id="tirarMusica">
+        <div>
+          <b>Remover a música de fundo</b>
+          <span>Deixa só a voz do streamer: música com direito autoral é o motivo nº 1 de o TikTok e o YouTube derrubarem corte. Na 1ª vez instala o separador (uns minutos); cada clipe demora um pouco mais.</span>
+        </div>
+      </label>
       <div id="linhaEstiloLeg" style="display:grid; gap:8px; margin:4px 0 10px">
         <div class="faixa"><span>Posição</span>
           <div class="chips" id="posLeg" style="flex:1">
@@ -1207,6 +1228,7 @@
           <div class="chips" id="estiloLeg" style="flex:1">
             <button type="button" class="chip" data-estleg="amarela" aria-pressed="true">Toda amarela</button>
             <button type="button" class="chip" data-estleg="destaque" aria-pressed="false">Branca + palavra amarela</button>
+            <button type="button" class="chip" data-estleg="caixa" aria-pressed="false">Com caixa preta</button>
           </div></div>
       </div>
 
@@ -1430,6 +1452,7 @@
         <button class="btn" id="btnRelatorio"><i data-lucide="file-text" class="i"></i> Relatório</button>
         <button class="btn" id="btnNovo"><i data-lucide="rotate-ccw" class="i"></i> Cortar outro</button>
         <button class="btn" id="btnTrechoProjeto"><i data-lucide="film" class="i"></i> Escolher trecho</button>
+        <button class="btn" id="btnLongo" title="Junta os cortes num vídeo 16:9 com capítulos"><i data-lucide="monitor-play" class="i"></i> Vídeo longo pro YouTube</button>
         <button class="btn principal" id="btnMais"><i data-lucide="plus" class="i"></i> Extrair mais cortes</button>
       </div>
     </div>
@@ -2589,6 +2612,21 @@
   if (cfg.esconderLegJogo === undefined) cfg.esconderLegJogo = true;
   $('esconderLegJogo').checked = cfg.esconderLegJogo;
   const mostrarLegJogo = () => { $('linhaLegJogo').hidden = !$('legendar').checked; $('linhaEstiloLeg').hidden = !$('legendar').checked; };
+  // Modo jogo: liga a predefinição (dá pra mudar cada item depois)
+  $('modoJogo').checked = !!cfg.modoJogo;
+  $('modoJogo').addEventListener('change', () => {
+    cfg.modoJogo = $('modoJogo').checked;
+    if (cfg.modoJogo) {
+      cfg.posLeg = 'meio'; cfg.estiloLeg = 'amarela'; cfg.esconderLegJogo = true; cfg.tirarMusica = true;
+      marcarChips('posLeg', 'data-posleg', cfg.posLeg); marcarChips('estiloLeg', 'data-estleg', cfg.estiloLeg);
+      $('esconderLegJogo').checked = true; $('tirarMusica').checked = true;
+    }
+    guardar();
+  });
+  $('paralelo2').checked = !!cfg.paralelo2;
+  $('paralelo2').addEventListener('change', () => { cfg.paralelo2 = $('paralelo2').checked; guardar(); });
+  $('tirarMusica').checked = !!cfg.tirarMusica;
+  $('tirarMusica').addEventListener('change', () => { cfg.tirarMusica = $('tirarMusica').checked; guardar(); });
   // Posicao e estilo da legenda (padrao: no meio, toda amarela - o visual dos cortes de react)
   if (!cfg.posLeg) cfg.posLeg = 'meio';
   if (!cfg.estiloLeg) cfg.estiloLeg = 'amarela';
@@ -3326,6 +3364,7 @@
         const n = d.clipes.length;
         // Pop-up de apoio: uma vez por sessao, uns segundos depois dos cortes prontos
         if (n) setTimeout(() => { try { if (!sessionStorage.getItem('clipador.apoio.visto')) { sessionStorage.setItem('clipador.apoio.visto', '1'); $('btnApoiar').click(); } } catch (_) {} }, 3000);
+        if (n && cfg.modoJogo && d.pasta) setTimeout(() => videoLongoAuto(d.pasta), 1500);
         avisar(n ? (n === 1 ? '1 clipe pronto ⚡' : n + ' clipes prontos ⚡') : 'Terminei de procurar',
           n ? 'Abra o Clipador pra assistir, baixar e copiar a legenda.' : 'Não saiu nenhum corte desta vez. Veja o motivo no programa.', 'fim-' + id);
       }
@@ -3365,7 +3404,7 @@
         ordem: cfg.ordem, modelo: vel.modelo, qualidade: vel.qualidade,
         legendar: cfg.legenda && formato !== 'original',
         esconderLegendaJogo: cfg.esconderLegJogo !== false,
-        posicaoLegenda: cfg.posLeg || 'meio', estiloLegenda: cfg.estiloLeg || 'amarela',
+        posicaoLegenda: cfg.posLeg || 'meio', estiloLegenda: cfg.estiloLeg || 'amarela', removerMusica: !!cfg.tirarMusica, paralelo: cfg.paralelo2 ? 2 : 1,
         textoGancho: cfg.gancho, tamanhoLegenda: cfg.tamLegenda,
         detectarWebcam: cfg.focarRosto, detectarMomentos: cfg.picos,
         trecho: trechoFluxo ? { inicio: trechoFluxo.inicio, fim: trechoFluxo.fim } : null,
@@ -3715,6 +3754,35 @@
 
   $('btnRelatorio').addEventListener('click', () => {
     if (projetoAtual && projetoAtual.relatorio) window.open(urlArquivo(projetoAtual.relatorio), '_blank');
+  });
+
+  // Modo jogo: depois dos cortes, monta sozinho o vídeo longo (sem travar a tela)
+  async function videoLongoAuto(pasta) {
+    try {
+      let r = {};
+      for (let i = 0; i < 6; i++) { // o processamento ainda pode estar fechando: tenta de novo uns segundos depois
+        r = await fetch('/api/video-longo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pasta }) }).then((x) => x.json());
+        if (!r.erro || !/Espere|Já tem/.test(r.erro)) break;
+        await new Promise((ok) => setTimeout(ok, 4000));
+      }
+      if (r.erro) throw new Error(r.erro);
+      avisar('Vídeo longo pro YouTube pronto ▶', 'Está na pasta do projeto (video-longo-youtube.mp4) com os capítulos em capitulos-youtube.txt.' + (r.aviso ? ' ' + r.aviso : ''), 'longo-' + Date.now());
+    } catch (e) { avisar('Vídeo longo não saiu', String(e.message || e), 'longo-erro'); }
+  }
+
+  // Vídeo longo 16:9 pro YouTube: junta os cortes do projeto e escreve os capítulos
+  $('btnLongo').addEventListener('click', async () => {
+    if (!projetoAtual) return;
+    const b = $('btnLongo'), antes = b.innerHTML; b.disabled = true; b.textContent = 'Montando o vídeo longo… (uns minutos)';
+    try {
+      const r = await fetch('/api/video-longo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pasta: projetoAtual.pasta }) }).then((x) => x.json());
+      if (r.erro) throw new Error(r.erro);
+      try { await navigator.clipboard.writeText(r.capitulos); } catch (_) {}
+      var NL = String.fromCharCode(10);
+      alert('Pronto! O vídeo longo (' + Math.round(r.duracao / 60) + ' min) está na pasta do projeto: video-longo-youtube.mp4.' + NL + NL + 'Capítulos (já copiados, é só colar na descrição do YouTube):' + NL + NL + r.capitulos + (r.aviso ? NL + NL + 'Atenção: ' + r.aviso : ''));
+      window.open(r.url, '_blank');
+    } catch (e) { erro('Não deu pra montar o vídeo longo: ' + (e.message || e)); }
+    b.disabled = false; b.innerHTML = antes; icones(b);
   });
 
   // ------------------------------------------------------------ extrair mais

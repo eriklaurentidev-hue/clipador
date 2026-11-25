@@ -72,8 +72,11 @@ function cabecalho(opcoes) {
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     // estilo "amarela": a legenda toda amarela (padrao dos cortes de podcast/react)
-    'Style: Corte,' + fonte + ',' + tamanho + ',' + (opcoes.estiloLegenda === 'amarela' ? AMARELO : BRANCO) + ',' + AMARELO + ',' + PRETO + ',&H64000000,' +
-      '-1,0,0,0,100,100,1,0,1,7,4,2,70,70,' + margemBaixo + ',1',
+    // estilo "caixa": texto branco numa caixa preta semitransparente (BorderStyle 3: a cor do contorno vira a caixa)
+    (opcoes.estiloLegenda === 'caixa'
+      ? 'Style: Corte,' + fonte + ',' + tamanho + ',' + BRANCO + ',' + AMARELO + ',&H38000000,&H00000000,-1,0,0,0,100,100,1,0,3,14,0,2,70,70,' + margemBaixo + ',1'
+      : 'Style: Corte,' + fonte + ',' + tamanho + ',' + (opcoes.estiloLegenda === 'amarela' ? AMARELO : BRANCO) + ',' + AMARELO + ',' + PRETO + ',&H64000000,' +
+        '-1,0,0,0,100,100,1,0,1,7,4,2,70,70,' + margemBaixo + ',1'),
     // Alignment 8 = em cima, centralizado; 5 = bem no meio da tela. BorderStyle 3
     // desenha uma tarja atras do texto: legivel por cima de qualquer imagem.
     'Style: Gancho,' + fonte + ',' + tamanhoGancho + ',' + BRANCO + ',' + BRANCO + ',' + PRETO + ',&HC8000000,' +

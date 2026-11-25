@@ -323,6 +323,7 @@ class SessaoAoVivo {
     this.canal = canalDoLink(this.url);
     this.formato = ['split', 'vertical', 'foco', 'blur', 'original'].includes(o.formato) ? o.formato : 'vertical';
     this.recorte = o.recorte || null;
+    this.semFaixasPretas = o.semFaixasPretas !== false; // opção: tirar a tarja preta do jogo/filme
     this.duracao = limitar(Number(o.duracao) || 30, 10, 120);
     this.auto = o.auto !== false;
     this.sensibilidade = LIMIAR[o.sensibilidade] ? o.sensibilidade : 'media';
@@ -811,7 +812,7 @@ class SessaoAoVivo {
     const t0 = Date.now();
     this.emitir({ tipo: 'renderizando', numero, origem: pedido.origem });
 
-    const filtro = media.filtroDeFormato(this.formato, this.recorte);
+    let filtro = media.filtroDeFormato(this.formato, this.recorte);
     // texto fixo da tela (.ass na pasta de trabalho, o ffmpeg roda la dentro)
     let ass = null;
     if (filtro && legenda.temTextoFixo(this.textoFixo)) {
@@ -829,6 +830,14 @@ class SessaoAoVivo {
     await media.rodar(ffmpeg, ['-y', '-hide_banner', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', lista,
       '-map', '0:v:0', '-map', '0:a:0?', '-c', 'copy', '-f', 'matroska', junto]);
     try { fs.unlinkSync(lista); } catch (_) {}
+
+    // Opção "sem faixas pretas": mede a tarja no trecho e o jogo ocupa só a parte com imagem.
+    if (filtro && this.semFaixasPretas && this.recorte && (this.formato === 'split' || this.formato === 'foco')) {
+      try {
+        const faixas = await media.acharFaixasPretas(junto, deslocamento, dur);
+        if (faixas) filtro = media.filtroDeFormato(this.formato, { ...this.recorte, faixas });
+      } catch (_) { /* sem medição: segue com o enquadramento marcado */ }
+    }
 
     let args;
     try {
@@ -1052,6 +1061,7 @@ class SessaoAoVivo {
     if (o.duracao) this.duracao = limitar(Number(o.duracao) || 30, 10, 120);
     if (['split', 'vertical', 'foco', 'blur', 'original'].includes(o.formato)) this.formato = o.formato;
     if (o.recorte) this.recorte = o.recorte;
+    if (typeof o.semFaixasPretas === 'boolean') this.semFaixasPretas = o.semFaixasPretas;
     if (o.textoFixo !== undefined) this.textoFixo = o.textoFixo;
     if (o.clipando === true && !this.clipando) {
       this.clipando = true;

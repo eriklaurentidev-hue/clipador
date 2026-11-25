@@ -12,6 +12,7 @@ const legenda = require('./legenda');
 const momentos = require('./momentos');
 const { encontrarCortes, diagnosticarCortes, corteDoTrecho, achatarPalavras, mmss } = require('./score');
 const { gerarCopy, gerarGanchoDeTela } = require('./copy');
+const extras = require('./extras');
 const { interpretar } = require('./intencao');
 const sessoes = require('./sessoes');
 
@@ -535,9 +536,12 @@ function titular(cortes, video, sessao, nome) {
  */
 async function gerarClipes(cortes, ctx) {
   const vertical = ctx.opcoes.formato !== 'original';
-  const prontos = [];
+  const prontos = new Array(cortes.length);
+  // Opção "2 clipes ao mesmo tempo" (PC forte): fila com 1 ou 2 em paralelo.
+  const emParalelo = Math.max(1, Math.min(2, Number(ctx.opcoes.paralelo) || 1));
+  let proximo = 0;
 
-  for (let i = 0; i < cortes.length; i++) {
+  async function gerarUm(i) {
     const c = cortes[i];
     // O gancho fica guardado no clipe: e o texto que a pessoa vai querer
     // reescrever depois, quando bater o olho no resultado e pensar em algo melhor.
@@ -566,10 +570,12 @@ async function gerarClipes(cortes, ctx) {
       rotulo: rotuloEtapa,
     }, c);
 
-    prontos.push(pronto);
+    prontos[i] = pronto;
     ctx.avisar({ tipo: 'clipe-pronto', clipe: pronto });
   }
-  return prontos;
+  async function trabalhador() { while (proximo < cortes.length) await gerarUm(proximo++); }
+  await Promise.all(Array.from({ length: Math.min(emParalelo, cortes.length) }, trabalhador));
+  return prontos.filter(Boolean);
 }
 
 function textoDoRelatorio(r) {
@@ -735,7 +741,7 @@ async function renderizarClipe(ctx, c) {
       margemBaixo: legendaNoMeio(opcoes, formatoDoClipe)
         ? Math.round(1920 - costuraDaDivisao(formatoDoClipe, opcoes.recorte) - (opcoes.tamanhoLegenda || 70) * 0.55)
         : margemDaLegenda(opcoes, formatoDoClipe),
-      estiloLegenda: opcoes.estiloLegenda === 'amarela' ? 'amarela' : 'destaque',
+      estiloLegenda: ['amarela', 'caixa'].includes(opcoes.estiloLegenda) ? opcoes.estiloLegenda : 'destaque',
       incluirPalavras: querLegenda,
       // O gancho da TELA e diferente do titulo do post: ele precisa criar
       // lacuna em 2 linhas, nao resumir o trecho.
@@ -766,6 +772,16 @@ async function renderizarClipe(ctx, c) {
     aoProgredir: (frac) => aoProgredir(frac,
       'Gerando o ' + rotulo + '... ' + Math.round(frac * 100) + '%'),
   });
+
+  // Opção: tirar a música de fundo (só a voz do streamer). Se falhar, o clipe fica como estava.
+  if (opcoes.removerMusica) {
+    try {
+      await extras.tirarMusica(mp4, acharPython(), (msg) => aoProgredir(1, msg + ' (' + rotulo + ')'));
+      observacao = (observacao ? observacao + ' ' : '') + 'Música de fundo removida: só a voz.';
+    } catch (e) {
+      avisar({ tipo: 'aviso', msg: 'Não deu pra tirar a música do ' + rotulo + ': ' + (e.message || e) });
+    }
+  }
 
   // legenda solta, pra editar depois
   legenda.gerarSrt(c.palavras || [], c.inicio, path.join(ctx.pastaSaida, ctx.base + '.srt'));

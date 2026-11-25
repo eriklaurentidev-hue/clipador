@@ -494,6 +494,20 @@ const servidor = http.createServer(async (req, res) => {
       res.writeHead(404); return res.end();
     }
 
+    // Vídeo longo 16:9 pro YouTube com os cortes do projeto + capítulos.
+    if (rota === '/api/video-longo' && req.method === 'POST') {
+      const corpo = await lerCorpo(req);
+      const p = projetos.abrir(corpo.pasta || '');
+      if (!p) return json(res, 404, { erro: 'Não achei esse projeto.' });
+      if (jobAtivo) return json(res, 429, { erro: 'Espere o vídeo que está sendo processado terminar.' });
+      jobAtivo = true;
+      try {
+        const r = await require('./extras').videoLongo(p.pasta);
+        return json(res, 200, Object.assign(r, { url: '/arquivo?p=' + encodeURIComponent(r.arquivo) }));
+      } catch (e) { return json(res, 422, { erro: e.message || String(e) }); }
+      finally { jobAtivo = false; }
+    }
+
     // Capa (miniatura) de um vídeo do YouTube/Twitch pra usar de referência de cores.
     if (rota === '/api/capa') {
       try { return json(res, 200, await capaDoLink(String(url.searchParams.get('url') || '').trim())); }
